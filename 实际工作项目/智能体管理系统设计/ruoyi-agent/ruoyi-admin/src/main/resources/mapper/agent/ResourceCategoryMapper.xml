@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.agent.mapper.ResourceCategoryMapper">
+
+    <resultMap type="com.ruoyi.agent.domain.ResourceCategory" id="ResourceCategoryResult">
+        <id property="categoryId" column="category_id"/>
+        <result property="categoryName" column="category_name"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="categoryIcon" column="category_icon"/>
+        <result property="sortOrder" column="sort_order"/>
+        <result property="status" column="status"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectResourceCategoryVo">
+        select category_id, category_name, parent_id, category_icon, sort_order, status,
+               create_by, create_time, update_by, update_time, remark
+        from resource_category
+    </sql>
+
+    <select id="selectResourceCategoryList" parameterType="com.ruoyi.agent.domain.ResourceCategory" resultMap="ResourceCategoryResult">
+        <include refid="selectResourceCategoryVo"/>
+        <where>
+            <if test="categoryName != null and categoryName != ''">
+                AND category_name like concat('%', #{categoryName}, '%')
+            </if>
+            <if test="parentId != null">
+                AND parent_id = #{parentId}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            AND del_flag = '0'
+        </where>
+        order by sort_order asc, create_time desc
+    </select>
+
+    <select id="selectResourceCategoryTree" resultMap="ResourceCategoryResult">
+        <include refid="selectResourceCategoryVo"/>
+        where del_flag = '0' and status = '0'
+        order by sort_order asc
+    </select>
+
+    <select id="selectResourceCategoryById" parameterType="Long" resultMap="ResourceCategoryResult">
+        <include refid="selectResourceCategoryVo"/>
+        where category_id = #{categoryId} and del_flag = '0'
+    </select>
+
+    <insert id="insertResourceCategory" parameterType="com.ruoyi.agent.domain.ResourceCategory" useGeneratedKeys="true" keyProperty="categoryId">
+        insert into resource_category (
+            category_name, parent_id, category_icon, sort_order, status,
+            create_by, create_time, remark, del_flag
+        ) values (
+            #{categoryName}, #{parentId}, #{categoryIcon}, #{sortOrder}, #{status},
+            #{createBy}, sysdate(), #{remark}, '0'
+        )
+    </insert>
+
+    <update id="updateResourceCategory" parameterType="com.ruoyi.agent.domain.ResourceCategory">
+        update resource_category
+        <set>
+            <if test="categoryName != null">category_name = #{categoryName},</if>
+            <if test="parentId != null">parent_id = #{parentId},</if>
+            <if test="categoryIcon != null">category_icon = #{categoryIcon},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_by = #{updateBy},
+            update_time = sysdate()
+        </set>
+        where category_id = #{categoryId}
+    </update>
+
+    <update id="deleteResourceCategoryById" parameterType="Long">
+        update resource_category set del_flag = '1' where category_id = #{categoryId}
+    </update>
+
+</mapper>

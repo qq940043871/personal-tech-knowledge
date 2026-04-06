@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.agent.mapper.DigitalResourceMapper">
+
+    <resultMap type="com.ruoyi.agent.domain.DigitalResource" id="DigitalResourceResult">
+        <id property="resourceId" column="resource_id"/>
+        <result property="resourceName" column="resource_name"/>
+        <result property="resourceType" column="resource_type"/>
+        <result property="categoryId" column="category_id"/>
+        <result property="fileUrl" column="file_url"/>
+        <result property="filePath" column="file_path"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="fileFormat" column="file_format"/>
+        <result property="thumbnailUrl" column="thumbnail_url"/>
+        <result property="width" column="width"/>
+        <result property="height" column="height"/>
+        <result property="duration" column="duration"/>
+        <result property="tags" column="tags"/>
+        <result property="description" column="description"/>
+        <result property="metadataJson" column="metadata_json"/>
+        <result property="status" column="status"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectDigitalResourceVo">
+        select resource_id, resource_name, resource_type, category_id, file_url, file_path,
+               file_size, file_format, thumbnail_url, width, height, duration,
+               tags, description, metadata_json, status,
+               create_by, create_time, update_by, update_time, remark
+        from digital_resource
+    </sql>
+
+    <select id="selectDigitalResourceList" parameterType="com.ruoyi.agent.domain.DigitalResource" resultMap="DigitalResourceResult">
+        <include refid="selectDigitalResourceVo"/>
+        <where>
+            <if test="resourceName != null and resourceName != ''">
+                AND resource_name like concat('%', #{resourceName}, '%')
+            </if>
+            <if test="resourceType != null and resourceType != ''">
+                AND resource_type = #{resourceType}
+            </if>
+            <if test="categoryId != null">
+                AND category_id = #{categoryId}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            AND del_flag = '0'
+        </where>
+        order by create_time desc
+    </select>
+
+    <select id="selectDigitalResourceById" parameterType="Long" resultMap="DigitalResourceResult">
+        <include refid="selectDigitalResourceVo"/>
+        where resource_id = #{resourceId} and del_flag = '0'
+    </select>
+
+    <insert id="insertDigitalResource" parameterType="com.ruoyi.agent.domain.DigitalResource" useGeneratedKeys="true" keyProperty="resourceId">
+        insert into digital_resource (
+            resource_name, resource_type, category_id, file_url, file_path,
+            file_size, file_format, thumbnail_url, width, height, duration,
+            tags, description, metadata_json, status,
+            create_by, create_time, remark, del_flag
+        ) values (
+            #{resourceName}, #{resourceType}, #{categoryId}, #{fileUrl}, #{filePath},
+            #{fileSize}, #{fileFormat}, #{thumbnailUrl}, #{width}, #{height}, #{duration},
+            #{tags}, #{description}, #{metadataJson}, #{status},
+            #{createBy}, sysdate(), #{remark}, '0'
+        )
+    </insert>
+
+    <update id="updateDigitalResource" parameterType="com.ruoyi.agent.domain.DigitalResource">
+        update digital_resource
+        <set>
+            <if test="resourceName != null">resource_name = #{resourceName},</if>
+            <if test="resourceType != null">resource_type = #{resourceType},</if>
+            <if test="categoryId != null">category_id = #{categoryId},</if>
+            <if test="fileUrl != null">file_url = #{fileUrl},</if>
+            <if test="filePath != null">file_path = #{filePath},</if>
+            <if test="fileSize != null">file_size = #{fileSize},</if>
+            <if test="fileFormat != null">file_format = #{fileFormat},</if>
+            <if test="thumbnailUrl != null">thumbnail_url = #{thumbnailUrl},</if>
+            <if test="width != null">width = #{width},</if>
+            <if test="height != null">height = #{height},</if>
+            <if test="duration != null">duration = #{duration},</if>
+            <if test="tags != null">tags = #{tags},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="metadataJson != null">metadata_json = #{metadataJson},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_by = #{updateBy},
+            update_time = sysdate()
+        </set>
+        where resource_id = #{resourceId}
+    </update>
+
+    <update id="deleteDigitalResourceByIds">
+        update digital_resource set del_flag = '1' where resource_id in
+        <foreach collection="array" item="resourceId" open="(" separator="," close=")">
+            #{resourceId}
+        </foreach>
+    </update>
+
+    <update id="deleteDigitalResourceById" parameterType="Long">
+        update digital_resource set del_flag = '1' where resource_id = #{resourceId}
+    </update>
+
+</mapper>
