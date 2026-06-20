@@ -62,7 +62,7 @@ def organize_files_by_category():
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'index.html')
+    return send_from_directory('.', 'python.html')
 
 @app.route('/api/files')
 def get_files():
