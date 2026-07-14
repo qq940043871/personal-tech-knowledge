@@ -104,6 +104,11 @@ public class RedisDistributedLock {
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
     
+    private static final String UNLOCK_SCRIPT = 
+        "if redis.call('get', KEYS[1]) == ARGV[1] then " +
+        "return redis.call('del', KEYS[1]) " +
+        "else return 0 end";
+    
     public boolean tryLock(String key, String value, long expireTime) {
         Boolean result = redisTemplate.opsForValue()
             .setIfAbsent(key, value, Duration.ofSeconds(expireTime));
@@ -111,10 +116,12 @@ public class RedisDistributedLock {
     }
     
     public void unlock(String key, String value) {
-        String currentValue = redisTemplate.opsForValue().get(key);
-        if (value.equals(currentValue)) {
-            redisTemplate.delete(key);
-        }
+        // 使用Lua脚本保证原子性
+        redisTemplate.execute(
+            new DefaultRedisScript<>(UNLOCK_SCRIPT, Long.class),
+            Collections.singletonList(key),
+            value
+        );
     }
 }
 

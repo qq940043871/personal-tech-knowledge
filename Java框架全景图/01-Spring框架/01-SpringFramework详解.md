@@ -217,11 +217,27 @@ public void updateUser(User user) {
 ### 1. Bean作用域
 
 ```java
+// 默认：单例（整个容器中只有一个实例）
 @Component
-@Scope("singleton")  // 默认：单例
-@Scope("prototype")   // 每次获取新实例
-@Scope("request")     // HTTP请求
-@Scope("session")     // HTTP会话
+@Scope("singleton")
+public class UserService {
+}
+
+// 每次获取新实例
+@Component
+@Scope("prototype")
+public class UserService {
+}
+
+// HTTP请求（每个请求一个实例，仅Web应用）
+@Component
+@Scope("request")
+public class UserService {
+}
+
+// HTTP会话（每个会话一个实例，仅Web应用）
+@Component
+@Scope("session")
 public class UserService {
 }
 ```

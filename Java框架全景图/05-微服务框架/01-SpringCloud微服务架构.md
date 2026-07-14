@@ -84,7 +84,11 @@ spring:
             - Path=/api/user/**
           filters:
             - StripPrefix=1
-            - RequestRateLimiter=10,20
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: "#{@userKeyResolver}"
 ```
 
 ```java
