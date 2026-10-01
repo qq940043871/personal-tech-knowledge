@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一条SQL是如何在数据库中执行的 - 架构师学习笔记</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .feature-card {
+            transition: all 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+        }
+        code {
+            background: #f1f5f9;
+            color: #e11d48;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        .step-number {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .flow-arrow {
+            color: #94a3b8;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-4xl mx-auto p-6">
+        <div class="bg-white rounded-xl shadow-md p-8 mb-8">
+            <!-- 标题 -->
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-microchip mr-3 text-indigo-600"></i>一条SQL是如何在数据库中执行的
+            </h1>
+            <p class="text-gray-500 mb-6">How a SQL Query is Executed Inside a Database</p>
+
+            <!-- 核心亮点 -->
+            <div class="bg-indigo-50 border-l-4 border-indigo-600 p-4 mb-8 rounded-r-lg">
+                <p class="text-indigo-700">
+                    <i class="fas fa-lightbulb mr-2"></i>
+                    <strong>核心问题：</strong>当你敲下 <code>SELECT * FROM users WHERE age &gt; 25 ORDER BY name LIMIT 10;</code> 并按下回车后，数据库内部到底发生了什么？本文以 MySQL（InnoDB）为例，逐层拆解整个过程。
+                </p>
+            </div>
+
+            <!-- 整体架构图 -->
+            <h2 class="text-2xl font-bold text-gray-800 mt-8 mb-4">
+                <i class="fas fa-sitemap mr-2 text-indigo-600"></i>整体架构概览
+            </h2>
+            <p class="text-gray-600 mb-4">
+                MySQL 可以分为 <strong>Server 层</strong>和<strong>存储引擎层</strong>两部分。Server 层负责连接、分析、优化、执行等通用功能；存储引擎层负责数据的实际存储和读写。
+            </p>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-6 mb-8 text-center overflow-x-auto">
+                <div class="flex flex-wrap items-center justify-center gap-2 md:gap-3 text-sm font-medium">
+                    <div class="bg-blue-500 text-white px-4 py-3 rounded-lg shadow">客户端</div>
+                    <span class="text-slate-400 text-xl">→</span>
+                    <div class="bg-cyan-500 text-white px-4 py-3 rounded-lg shadow">连接器</div>
+                    <span class="text-slate-400 text-xl">→</span>
+                    <div class="bg-teal-500 text-white px-4 py-3 rounded-lg shadow">分析器</div>
+                    <span class="text-slate-400 text-xl">→</span>
+                    <div class="bg-green-500 text-white px-4 py-3 rounded-lg shadow">优化器</div>
+                    <span class="text-slate-400 text-xl">→</span>
+                    <div class="bg-orange-500 text-white px-4 py-3 rounded-lg shadow">执行器</div>
+                    <span class="text-slate-400 text-xl">→</span>
+                    <div class="bg-red-500 text-white px-4 py-3 rounded-lg shadow">存储引擎</div>
+                </div>
+                <div class="mt-4 text-xs text-slate-400">Server 层（连接器 → 分析器 → 优化器 → 执行器）&nbsp;&nbsp;|&nbsp;&nbsp;存储引擎层（InnoDB / MyISAM / Memory）</div>
+            </div>
+
+            <!-- 第一步：连接器 -->
+            <h2 class="text-2xl font-bold text-gray-800 mt-10 mb-4">
+                <span class="step-number bg-cyan-100 text-cyan-700 text-lg inline-flex mr-2">①</span>连接器
+            </h2>
+            <p class="text-gray-600 mb-4">
+                连接器负责与客户端建立 TCP 连接、身份认证、权限校验。
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="border border-cyan-200 bg-cyan-50/30 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-plug text-cyan-500 mr-1"></i> TCP 三次握手
+                    </h4>
+                    <p class="text-sm text-gray-600">客户端通过 TCP 与 MySQL 服务端（默认 3306 端口）建立连接。</p>
+                </div>
+                <div class="border border-cyan-200 bg-cyan-50/30 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-shield-haltered text-cyan-500 mr-1"></i> 身份认证
+                    </h4>
+                    <p class="text-sm text-gray-600">校验用户名、密码、连接来源 IP 是否在授权范围内。</p>
+                </div>
+                <div class="border border-cyan-200 bg-cyan-50/30 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-key text-cyan-500 mr-1"></i> 权限读取
+                    </h4>
+                    <p class="text-sm text-gray-600">从权限表读取该用户拥有的权限，缓存到连接对象中。后续操作基于此快照判断。</p>
+                </div>
+                <div class="border border-cyan-200 bg-cyan-50/30 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-clock text-cyan-500 mr-1"></i> 连接管理
+                    </h4>
+                    <p class="text-sm text-gray-600">空闲连接超过 <code>wait_timeout</code>（默认 8 小时）自动断开。长连接累积内存可能导致 OOM。</p>
+                </div>
+            </div>
+            <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg text-sm text-yellow-700 mb-4">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                <strong>注意：</strong>权限在连接建立时读取并缓存。如果中途用 <code>GRANT</code> 修改了权限，已存在的连接不会生效，需要重新连接。
+            </div>
+
+            <!-- 第二步：查询缓存（8.0 已移除） -->
+            <h2 class="text-2xl font-bold text-gray-800 mt-10 mb-4">
+                <span class="step-number bg-slate-300 text-slate-600 text-lg inline-flex mr-2">⓪</span>查询缓存 <span class="text-sm text-slate-400 font-normal">(MySQL 8.0 已移除)</span>
+            </h2>
+            <p class="text-gray-600 mb-4">
+                MySQL 8.0 之前，SQL 语句会先以 key-value 的形式被缓存在内存中。如果命中缓存，直接返回结果，不走后续流程。但由于缓存的失效粒度太粗（表上任何写操作都会清空整张表的所有缓存），在高并发写入场景下缓存命中率极低，反而成为性能瓶颈，因此在 8.0 版本中被彻底移除。
+            </p>
+
+            <!-- 第三步：分析器 -->
+            <h2 class="text-2xl font-bold text-gray-800 mt-10 mb-4">
+                <span class="step-number bg-teal-100 text-teal-700 text-lg inline-flex mr-2">②</span>分析器 —— 词法分析 &amp; 语法分析
+            </h2>
+            <p class="text-gray-600 mb-4">
+                分析器负责将 SQL 文本"翻译"成数据库能理解的内部数据结构 —— 语法树（AST）。
+            </p>
+
+            <div class="border border-gray-200 rounded-lg p-6 mb-6">
+                <h4 class="font-bold text-gray-800 mb-3">
+                    <i class="fas fa-font text-teal-500 mr-1"></i> 词法分析（Lexical Analysis）
+                </h4>
+                <p class="text-gray-600 mb-3 text-sm">将 SQL 字符串拆解为有意义的 Token（记号）。</p>
+                <div class="bg-slate-50 rounded-lg p-3 mb-3 text-sm">
+                    <p class="text-slate-500 mb-1">输入 SQL：</p>
+                    <code class="bg-transparent text-slate-700 px-0">SELECT * FROM users WHERE id = 1;</code>
+                </div>
+                <table class="min-w-full text-sm border border-gray-200 mb-0">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="py-2 px-3 border-b text-left">Token</th>
+                            <th class="py-2 px-3 border-b text-left">类型</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="py-1.5 px-3 border-b">SELECT</td><td class="py-1.5 px-3 border-b">关键字</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b">*</td><td class="py-1.5 px-3 border-b">运算符 / 通配符</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b">FROM</td><td class="py-1.5 px-3 border-b">关键字</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b">users</td><td class="py-1.5 px-3 border-b">标识符（表名）</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b">WHERE</td><td class="py-1.5 px-3 border-b">关键字</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b">id</td><td class="py-1.5 px-3 border-b">标识符（列名）</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b">=</td><td class="py-1.5 px-3 border-b">运算符</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b">1</td><td class="py-1.5 px-3 border-b">数字字面量</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b">;</td><td class="py-1.5 px-3 border-b">分隔符</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="border border-gray-200 rounded-lg p-6 mb-6">
+                <h4 class="font-bold text-gray-800 mb-3">
+                    <i class="fas fa-project-diagram text-teal-500 mr-1"></i> 语法分析（Syntax Analysis）
+                </h4>
+                <p class="text-gray-600 mb-3 text-sm">根据 MySQL 定义的语法规则，将 Token 序列组织成一颗<strong>抽象语法树（AST, Abstract Syntax Tree）</strong>。</p>
+                <p class="text-gray-600 mb-3 text-sm">如果 SQL 语法有误（例如 <code>SELECT * FORM users</code> 把 FROM 拼错），MySQL 会在这一步抛出错误：
+                    <code class="bg-red-50 text-red-600 px-1">ERROR 1064: You have an error in your SQL syntax</code>。</p>
+                <div class="bg-slate-50 rounded-lg p-4 text-center text-sm text-slate-600">
+                    <pre class="text-left" style="font-family: Consolas, Monaco, monospace;">SELECT_STMT
+├── select_list: *
+└── table_ref: users
+    └── WHERE
+        └── condition: id = 1</pre>
+                </div>
+            </div>
+
+            <!-- 第四步：优化器 -->
+            <h2 class="text-2xl font-bold text-gray-800 mt-10 mb-4">
+                <span class="step-number bg-green-100 text-green-700 text-lg inline-flex mr-2">③</span>优化器 —— 选择最优执行方案
+            </h2>
+            <p class="text-gray-600 mb-4">
+                优化器是数据库的大脑。在语法树的基础上，它决定<strong>使用哪个索引</strong>、<strong>以什么顺序 JOIN</strong>、<strong>是否做条件下推</strong>等关键策略，生成一个代价最低的<strong>执行计划</strong>。
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="feature-card border border-gray-200 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-search text-green-500 mr-1"></i> 索引选择
+                    </h4>
+                    <p class="text-sm text-gray-600">
+                        基于统计信息（数据量、区分度、索引长度）评估每种索引的扫描行数。同样一条 SQL，<code>id &gt; 1000</code> 可能走索引，<code>id &gt; 1</code>（覆盖全表大部分数据）可能直接全表扫描更快。
+                    </p>
+                </div>
+                <div class="feature-card border border-gray-200 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-link text-green-500 mr-1"></i> JOIN 顺序选择
+                    </h4>
+                    <p class="text-sm text-gray-600">
+                        多表 JOIN 时，决定以哪张表作为驱动表。原则是小表驱动大表，减少扫描行数。<strong>优化器通过 Nested-Loop Join + 代价估算来决定最优 Join 顺序</strong>。
+                    </p>
+                </div>
+                <div class="feature-card border border-gray-200 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-arrow-down text-green-500 mr-1"></i> 条件下推
+                    </h4>
+                    <p class="text-sm text-gray-600">
+                        <strong>索引条件下推（ICP, Index Condition Pushdown）：</strong>将 WHERE 条件的过滤下推到存储引擎层，减少回表次数。5.6 版本引入。
+                    </p>
+                </div>
+                <div class="feature-card border border-gray-200 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-magic text-green-500 mr-1"></i> 查询改写
+                    </h4>
+                    <p class="text-sm text-gray-600">
+                        优化器会自动进行查询改写：子查询转 JOIN、<code>IN</code> 转 <code>EXISTS</code>、常量表达式折叠（<code>1+2</code> → <code>3</code>）、外连接转内连接等。
+                    </p>
+                </div>
+            </div>
+
+            <div class="border border-gray-200 rounded-lg p-5 mb-6">
+                <h4 class="font-bold text-gray-800 mb-3">
+                    <i class="fas fa-chart-bar text-green-500 mr-1"></i> 查看执行计划：EXPLAIN
+                </h4>
+                <p class="text-gray-600 mb-3 text-sm">使用 <code>EXPLAIN</code> 可以查看优化器生成的执行计划：</p>
+                <pre class="code-block p-4 text-sm font-mono">EXPLAIN SELECT * FROM users WHERE age &gt; 25 ORDER BY name LIMIT 10;
+
++----+-------------+-------+-------+---------------+------+---------+------+------+-------------+
+| id | select_type | table | type  | possible_keys | key  | key_len | ref  | rows | Extra       |
++----+-------------+-------+-------+---------------+------+---------+------+------+-------------+
+|  1 | SIMPLE      | users | range | idx_age       | idx_age | 5    | NULL |  100 | Using where |
++----+-------------+-------+-------+---------------+------+---------+------+------+-------------+</pre>
+                <table class="min-w-full text-sm border border-gray-200 mt-4">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="py-2 px-3 border-b">字段</th>
+                            <th class="py-2 px-3 border-b">含义</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="py-1.5 px-3 border-b"><code>id</code></td><td class="py-1.5 px-3 border-b">SELECT 的序号，id 越大优先级越高</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b"><code>type</code></td><td class="py-1.5 px-3 border-b">访问类型：<strong>system &gt; const &gt; eq_ref &gt; ref &gt; range &gt; index &gt; ALL</strong></td></tr>
+                        <tr><td class="py-1.5 px-3 border-b"><code>key</code></td><td class="py-1.5 px-3 border-b">实际使用的索引</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b"><code>rows</code></td><td class="py-1.5 px-3 border-b"><strong>估算的扫描行数</strong>（不是精确值）</td></tr>
+                        <tr><td class="py-1.5 px-3 border-b"><code>Extra</code></td><td class="py-1.5 px-3 border-b">额外信息，如 Using index（覆盖索引）、Using filesort（文件排序，不理想）</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 优化器核心策略 -->
+            <div class="border border-gray-200 rounded-lg p-5 mb-6">
+                <h4 class="font-bold text-gray-800 mb-3">
+                    <i class="fas fa-cogs text-green-500 mr-1"></i> 优化器核心策略
+                </h4>
+                <div class="space-y-3 text-sm text-gray-600">
+                    <div class="flex items-start">
+                        <span class="bg-green-100 text-green-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-3 mt-0.5 flex-shrink-0">1</span>
+                        <div>
+                            <strong class="text-gray-800">基于成本的优化（CBO, Cost-Based Optimization）：</strong>
+                            优化器根据统计信息估算每种执行计划的 CPU、IO 代价，选择总代价最小的方案。MySQL 使用 <code>ANALYZE TABLE</code> 更新统计信息。
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="bg-green-100 text-green-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-3 mt-0.5 flex-shrink-0">2</span>
+                        <div>
+                            <strong class="text-gray-800">MRR（Multi-Range Read，多范围读取）：</strong>
+                            将二级索引的随机 IO 转化为顺序 IO，通过先收集主键再排序后批量回表，减少磁盘随机读的磁头移动次数。
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="bg-green-100 text-green-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-3 mt-0.5 flex-shrink-0">3</span>
+                        <div>
+                            <strong class="text-gray-800">BNL（Block Nested-Loop Join）：</strong>
+                            当 JOIN 没有可用索引时，将驱动表的数据分批读入 Join Buffer（默认 256KB），然后与被驱动表进行全表扫描匹配。8.0.20 后被 Hash Join 替代。
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第五步：执行器 -->
+            <h2 class="text-2xl font-bold text-gray-800 mt-10 mb-4">
+                <span class="step-number bg-orange-100 text-orange-700 text-lg inline-flex mr-2">④</span>执行器
+            </h2>
+            <p class="text-gray-600 mb-4">
+                执行器拿到优化器生成的执行计划后，开始<strong>逐行</strong>调用存储引擎的接口来执行。执行器本身不存储数据，它通过存储引擎提供的 Handler API 来读写数据。
+            </p>
+
+            <div class="border border-gray-200 rounded-lg p-5 mb-6">
+                <h4 class="font-bold text-gray-800 mb-3">
+                    <i class="fas fa-play text-orange-500 mr-1"></i> 执行流程（伪代码）
+                </h4>
+                <pre class="code-block p-4 text-sm font-mono">-- SQL: SELECT * FROM users WHERE age &gt; 25
+
+// 执行器的伪代码逻辑（无索引时）
+for (row in users_table) {          // 调用引擎接口，逐行读取，全表扫描
+    if (row.age &gt; 25) {             // 在 Server 层判断
+        send_to_client(row);         // 满足条件，发送给客户端
+    }
+}
+
+// 有索引时
+for (index_row in idx_age) {        // 遍历索引
+    if (index_row.age &gt; 25) {
+        // 索引条件下推：age &gt; 25 在引擎层判断
+        row = engine.fetch_by_primary_key(index_row.pk);
+        send_to_client(row);
+    }
+}</pre>
+            </div>
+
+            <!-- 第六步：存储引擎 -->
+            <h2 class="text-2xl font-bold text-gray-800 mt-10 mb-4">
+                <span class="step-number bg-red-100 text-red-700 text-lg inline-flex mr-2">⑤</span>存储引擎 —— 数据到底在哪
+            </h2>
+            <p class="text-gray-600 mb-4">
+                存储引擎负责数据的<strong>物理存储和读写</strong>。MySQL 是插件式架构，支持多种引擎，最主流的是 InnoDB（5.5.5 起成为默认引擎）。
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="feature-card border border-red-200 bg-red-50/30 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-database text-red-500 mr-1"></i> InnoDB
+                    </h4>
+                    <ul class="text-sm text-gray-600 space-y-1 list-disc pl-5">
+                        <li>支持事务（ACID）</li>
+                        <li>行级锁 &amp; MVCC</li>
+                        <li>B+ 树索引（聚簇索引）</li>
+                        <li>支持外键</li>
+                        <li>崩溃恢复（Redo Log）</li>
+                    </ul>
+                </div>
+                <div class="feature-card border border-gray-200 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-file-alt text-gray-500 mr-1"></i> MyISAM
+                    </h4>
+                    <ul class="text-sm text-gray-600 space-y-1 list-disc pl-5">
+                        <li>不支持事务</li>
+                        <li>表级锁</li>
+                        <li>全文索引（5.6 前）</li>
+                        <li>不支持外键</li>
+                        <li>适合只读 / 极少写场景</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="border border-gray-200 rounded-lg p-5 mb-6">
+                <h4 class="font-bold text-gray-800 mb-3">
+                    <i class="fas fa-hdd text-red-500 mr-1"></i> InnoDB 内部的读写路径（以 SELECT 为例）
+                </h4>
+                <div class="space-y-3 text-sm text-gray-600">
+                    <div class="flex items-start">
+                        <span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-3 mt-0.5 flex-shrink-0">1</span>
+                        <div><strong class="text-gray-800">Buffer Pool 检查：</strong>先检查数据页是否已在内存的 Buffer Pool 中。命中 → 直接返回。</div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-3 mt-0.5 flex-shrink-0">2</span>
+                        <div><strong class="text-gray-800">磁盘读取：</strong>未命中 → 从磁盘（.ibd 文件）读取对应的数据页，先载入 Buffer Pool。</div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-3 mt-0.5 flex-shrink-0">3</span>
+                        <div><strong class="text-gray-800">MVCC 可见性判断：</strong>根据事务 ID 和 Read View 判断当前事务能看到哪个版本的数据。</div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-3 mt-0.5 flex-shrink-0">4</span>
+                        <div><strong class="text-gray-800">返回数据：</strong>将满足条件的行返回给 Server 层的执行器。</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 两条日志 -->
+            <h2 class="text-2xl font-bold text-gray-800 mt-10 mb-4">
+                <i class="fas fa-scroll mr-2 text-indigo-600"></i>重要补充：Redo Log 与 Binlog
+            </h2>
+            <p class="text-gray-600 mb-4">
+                以上讲的是查询（SELECT）的执行流程。如果是更新语句（INSERT / UPDATE / DELETE），还会涉及两个关键日志，它们是 MySQL 实现高可靠性的基石。
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="border border-red-200 bg-red-50/30 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-redo text-red-500 mr-1"></i> Redo Log（重做日志）
+                        <span class="text-xs font-normal text-red-400 ml-1">InnoDB 特有</span>
+                    </h4>
+                    <ul class="text-sm text-gray-600 space-y-1 list-disc pl-5">
+                        <li><strong>物理日志：</strong>记录"在某个数据页上做了什么修改"</li>
+                        <li><strong>WAL 机制：</strong>先写日志再写磁盘</li>
+                        <li><strong>循环写：</strong>固定大小（默认 2 组 × 4 文件），循环覆盖</li>
+                        <li><strong>用途：</strong>崩溃恢复（Crash Recovery）</li>
+                    </ul>
+                </div>
+                <div class="border border-purple-200 bg-purple-50/30 rounded-lg p-5">
+                    <h4 class="font-bold text-gray-800 mb-2">
+                        <i class="fas fa-clipboard-list text-purple-500 mr-1"></i> Binlog（归档日志）
+                        <span class="text-xs font-normal text-purple-400 ml-1">Server 层</span>
+                    </h4>
+                    <ul class="text-sm text-gray-600 space-y-1 list-disc pl-5">
+                        <li><strong>逻辑日志：</strong>记录 SQL 语句的原始逻辑</li>
+                        <li><strong>追加写：</strong>无限追加，不会覆盖</li>
+                        <li><strong>用途：</strong>主从复制、数据恢复</li>
+                        <li><strong>格式：</strong>STATEMENT / ROW / MIXED</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- UPDATE 两阶段提交 -->
+            <div class="border border-gray-200 rounded-lg p-5 mb-8">
+                <h4 class="font-bold text-gray-800 mb-3">
+                    <i class="fas fa-exchange-alt text-indigo-500 mr-1"></i> UPDATE 语句的二阶段提交
+                </h4>
+                <p class="text-gray-600 mb-3 text-sm">为保证 Redo Log 和 Binlog 逻辑一致，更新语句采用<strong>二阶段提交</strong>：</p>
+                <div class="space-y-2 text-sm text-gray-600">
+                    <div class="flex items-center">
+                        <span class="bg-indigo-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-3 flex-shrink-0">1</span>
+                        <div><strong>Prepare 阶段：</strong>写 Redo Log，状态标记为 prepare。</div>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="bg-indigo-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-3 flex-shrink-0">2</span>
+                        <div><strong>写 Binlog：</strong>记录本次修改的 Binlog。</div>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="bg-indigo-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-3 flex-shrink-0">3</span>
+                        <div><strong>Commit 阶段：</strong>Redo Log 状态改为 commit，事务完成。</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 总结 -->
+            <h2 class="text-2xl font-bold text-gray-800 mt-10 mb-4">
+                <i class="fas fa-check-circle mr-2 text-indigo-600"></i>总结
+            </h2>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-6">
+                <table class="min-w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-300">
+                            <th class="py-2 px-3 text-left text-slate-700">阶段</th>
+                            <th class="py-2 px-3 text-left text-slate-700">负责组件</th>
+                            <th class="py-2 px-3 text-left text-slate-700">核心职责</th>
+                            <th class="py-2 px-3 text-left text-slate-700">输出</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-600">
+                        <tr class="border-b border-slate-200">
+                            <td class="py-2 px-3 font-medium">① 连接</td>
+                            <td class="py-2 px-3">连接器</td>
+                            <td class="py-2 px-3">TCP 握手、身份认证、权限读取</td>
+                            <td class="py-2 px-3">连接对象</td>
+                        </tr>
+                        <tr class="border-b border-slate-200">
+                            <td class="py-2 px-3 font-medium">② 分析</td>
+                            <td class="py-2 px-3">分析器</td>
+                            <td class="py-2 px-3">词法分析 → 语法分析 → AST</td>
+                            <td class="py-2 px-3">抽象语法树</td>
+                        </tr>
+                        <tr class="border-b border-slate-200">
+                            <td class="py-2 px-3 font-medium">③ 优化</td>
+                            <td class="py-2 px-3">优化器</td>
+                            <td class="py-2 px-3">索引选择、JOIN 顺序、条件下推</td>
+                            <td class="py-2 px-3">执行计划</td>
+                        </tr>
+                        <tr class="border-b border-slate-200">
+                            <td class="py-2 px-3 font-medium">④ 执行</td>
+                            <td class="py-2 px-3">执行器</td>
+                            <td class="py-2 px-3">按计划调用引擎接口，逐行操作</td>
+                            <td class="py-2 px-3">结果集</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 font-medium">⑤ 存储</td>
+                            <td class="py-2 px-3">存储引擎</td>
+                            <td class="py-2 px-3">Buffer Pool、B+ 树、MVCC、Redo Log</td>
+                            <td class="py-2 px-3">磁盘文件 (.ibd)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 底部：面试常见追问 -->
+            <div class="mt-8 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl p-6">
+                <h3 class="text-xl font-bold mb-3">
+                    <i class="fas fa-star mr-2"></i>面试常见追问
+                </h3>
+                <ul class="space-y-2 text-sm opacity-90">
+                    <li><strong>Q: </strong>"为什么 MySQL 8.0 移除了查询缓存？" → 缓存失效粒度太粗，一张表有任何写操作就清空全表缓存，高并发写入场景下命中率极低且维护开销大。</li>
+                    <li><strong>Q: </strong>"优化器选错索引怎么办？" → 使用 <code class="bg-white/20 px-1 rounded">FORCE INDEX</code> 强制指定，或调整统计信息 <code class="bg-white/20 px-1 rounded">ANALYZE TABLE</code>，或使用 <code class="bg-white/20 px-1 rounded">optimizer_switch</code> 参数调整优化器行为。</li>
+                    <li><strong>Q: </strong>"为什么要用二阶段提交？" → 防止 Redo Log 和 Binlog 不一致导致崩溃恢复后主从数据不一致。</li>
+                    <li><strong>Q: </strong>"type=ALL 一定慢吗？" → 不一定。如果表很小（如几百行），全表扫描反而比走索引更快（减少回表开销）。</li>
+                </ul>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>

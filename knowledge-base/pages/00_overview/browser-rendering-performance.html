@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>浏览器渲染原理与首页性能优化 - 架构师学习笔记</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#8B5CF6',
+                        neutral: '#1F2937',
+                        light: '#F9FAFB',
+                        danger: '#EF4444',
+                        warning: '#F59E0B'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .timeline-line {
+            position: absolute;
+            left: 24px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, #3B82F6, #10B981, #8B5CF6);
+        }
+        .step-card {
+            transition: all 0.3s ease;
+        }
+        .step-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px -10px rgba(0,0,0,0.15);
+        }
+        .perf-bar {
+            transition: width 1.5s ease-in-out;
+        }
+        .highlight-box {
+            border-left: 4px solid #3B82F6;
+            background: linear-gradient(135deg, rgba(59,130,246,0.05), rgba(59,130,246,0.02));
+        }
+    </style>
+</head>
+<body class="bg-light font-sans text-neutral">
+
+    <!-- 导航栏 -->
+    <nav class="fixed w-full bg-white/95 backdrop-blur-sm shadow-sm z-50">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-tachometer text-primary text-xl"></i>
+                <span class="font-bold text-lg">浏览器渲染与性能优化</span>
+            </div>
+            <div class="hidden md:flex space-x-5 text-sm">
+                <a href="#pipeline" class="hover:text-primary transition-colors">渲染流水线</a>
+                <a href="#critical-path" class="hover:text-primary transition-colors">关键渲染路径</a>
+                <a href="#why-slow" class="hover:text-primary transition-colors">首页为什么慢</a>
+                <a href="#optimize" class="hover:text-primary transition-colors">优化策略</a>
+                <a href="#devtools" class="hover:text-primary transition-colors">DevTools实战</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 英雄区域 -->
+    <header class="pt-28 pb-16 bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div class="max-w-4xl mx-auto px-4 text-center">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4 leading-tight">
+                页面是如何被渲染出来的？<br>
+                <span class="text-primary">为什么首页打开这么慢？</span>
+            </h1>
+            <p class="text-lg text-gray-600 mb-6 max-w-2xl mx-auto">
+                从浏览器内核的渲染流水线，到关键渲染路径的性能瓶颈，一次性讲清楚"打开慢"的根因与优化方案
+            </p>
+            <div class="flex flex-wrap justify-center gap-3 text-sm">
+                <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full">渲染流水线</span>
+                <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full">关键渲染路径</span>
+                <span class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full">性能优化</span>
+                <span class="px-3 py-1 bg-orange-100 text-orange-700 rounded-full">DevTools</span>
+                <span class="px-3 py-1 bg-red-100 text-red-700 rounded-full">实战排查</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 py-12">
+
+        <!-- ==================== 第一部分：渲染流水线 ==================== -->
+        <section id="pipeline" class="mb-20 scroll-mt-24">
+            <div class="flex items-center mb-8">
+                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                    <i class="fa fa-cogs text-primary"></i>
+                </div>
+                <h2 class="text-2xl font-bold">一、浏览器渲染流水线全景</h2>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-6 highlight-box">
+                <p class="mb-4">浏览器的渲染引擎（Blink / WebKit / Gecko）收到 HTML 后，会经历一套标准流水线，将代码转化为屏幕上可见的像素。理解这个流水线是回答"为什么慢"的前提。</p>
+
+                <!-- 渲染流水线大图 -->
+                <div class="relative pl-12 pb-6 my-8">
+                    <div class="timeline-line"></div>
+
+                    <!-- 步骤1: 网络 -->
+                    <div class="step-card relative bg-blue-50 rounded-lg p-4 mb-6 ml-2">
+                        <div class="absolute -left-[2.65rem] w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold">1</div>
+                        <h3 class="font-bold text-lg mb-2 text-blue-700">
+                            <i class="fa fa-cloud-download mr-2"></i>网络请求 & 资源加载
+                        </h3>
+                        <p class="text-gray-700 mb-2">浏览器发起 HTTP 请求，下载 HTML。遇到外部资源（CSS/JS/图片/字体）会发起新请求。</p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3 text-xs">
+                            <div class="bg-white rounded p-2">
+                                <span class="font-bold text-red-500">阻塞渲染</span>：CSS、同步 JS
+                            </div>
+                            <div class="bg-white rounded p-2">
+                                <span class="font-bold text-yellow-500">阻塞解析</span>：同步 JS（<code>&lt;script&gt;</code>）
+                            </div>
+                            <div class="bg-white rounded p-2">
+                                <span class="font-bold text-green-500">不阻塞</span>：async/defer JS、图片
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 步骤2: 解析 -->
+                    <div class="step-card relative bg-green-50 rounded-lg p-4 mb-6 ml-2">
+                        <div class="absolute -left-[2.65rem] w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center text-sm font-bold">2</div>
+                        <h3 class="font-bold text-lg mb-2 text-green-700">
+                            <i class="fa fa-code mr-2"></i>解析 → DOM 树 + CSSOM 树
+                        </h3>
+                        <p class="text-gray-700 mb-2">HTML 解析器逐字节读取，通过 <strong>词法分析 → 语法分析</strong> 构建 DOM 树。同时 CSS 解析器构建 CSSOM 树。</p>
+                        <div class="bg-white/80 rounded p-3 text-sm font-mono text-gray-600">
+                            HTML 字节 → 字符 → Token → 节点 → DOM 树<br>
+                            CSS 字节 → 字符 → Token → 规则 → CSSOM 树
+                        </div>
+                    </div>
+
+                    <!-- 步骤3: 渲染树 -->
+                    <div class="step-card relative bg-purple-50 rounded-lg p-4 mb-6 ml-2">
+                        <div class="absolute -left-[2.65rem] w-8 h-8 rounded-full bg-purple-500 text-white flex items-center justify-center text-sm font-bold">3</div>
+                        <h3 class="font-bold text-lg mb-2 text-purple-700">
+                            <i class="fa fa-sitemap mr-2"></i>样式计算 → 渲染树
+                        </h3>
+                        <p class="text-gray-700 mb-2">DOM + CSSOM 合并，<strong>剔除不可见节点</strong>（display:none、&lt;head&gt;、&lt;script&gt;），计算每个节点的最终样式（Computed Style）。</p>
+                        <div class="text-xs text-gray-500 italic">⚠️ 复杂 CSS 选择器（如嵌套 4 层以上的后代选择器）会显著增加样式计算时间</div>
+                    </div>
+
+                    <!-- 步骤4: 布局 -->
+                    <div class="step-card relative bg-orange-50 rounded-lg p-4 mb-6 ml-2">
+                        <div class="absolute -left-[2.65rem] w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center text-sm font-bold">4</div>
+                        <h3 class="font-bold text-lg mb-2 text-orange-700">
+                            <i class="fa fa-th mr-2"></i>布局（Layout / Reflow）
+                        </h3>
+                        <p class="text-gray-700 mb-2">计算每个可见元素的<strong>精确位置和尺寸</strong>。这是一个递归过程，父元素影响子元素。</p>
+                        <div class="bg-white/80 rounded p-2 text-sm flex items-center gap-2">
+                            <span class="px-2 py-0.5 bg-red-100 text-red-600 rounded text-xs font-bold">高成本</span>
+                            <span>修改 width/height/margin/padding/top/left/position → 触发 Reflow</span>
+                        </div>
+                    </div>
+
+                    <!-- 步骤5: 绘制 -->
+                    <div class="step-card relative bg-pink-50 rounded-lg p-4 mb-6 ml-2">
+                        <div class="absolute -left-[2.65rem] w-8 h-8 rounded-full bg-pink-500 text-white flex items-center justify-center text-sm font-bold">5</div>
+                        <h3 class="font-bold text-lg mb-2 text-pink-700">
+                            <i class="fa fa-paint-brush mr-2"></i>绘制（Paint）
+                        </h3>
+                        <p class="text-gray-700 mb-2">将元素的视觉属性（颜色、边框、阴影、文字）填充到像素图层中，生成<strong>位图数据</strong>。</p>
+                        <div class="bg-white/80 rounded p-2 text-sm flex items-center gap-2">
+                            <span class="px-2 py-0.5 bg-yellow-100 text-yellow-600 rounded text-xs font-bold">中成本</span>
+                            <span>修改 color/background/border-radius/box-shadow → 触发 Repaint</span>
+                        </div>
+                    </div>
+
+                    <!-- 步骤6: 合成 -->
+                    <div class="step-card relative bg-teal-50 rounded-lg p-4 ml-2">
+                        <div class="absolute -left-[2.65rem] w-8 h-8 rounded-full bg-teal-500 text-white flex items-center justify-center text-sm font-bold">6</div>
+                        <h3 class="font-bold text-lg mb-2 text-teal-700">
+                            <i class="fa fa-clone mr-2"></i>合成（Composite）
+                        </h3>
+                        <p class="text-gray-700 mb-2"><strong>GPU 加速</strong>：将多个图层合并为最终画面，通过 GPU 渲染到屏幕。这是最高效的操作。</p>
+                        <div class="bg-white/80 rounded p-2 text-sm flex items-center gap-2">
+                            <span class="px-2 py-0.5 bg-green-100 text-green-600 rounded text-xs font-bold">低成本</span>
+                            <span>修改 transform/opacity → 仅触发 Composite，跳过 Layout 和 Paint</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reflow vs Repaint vs Composite 对比表 -->
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <h3 class="font-bold text-lg mb-4">触发不同阶段的 CSS 属性速查</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="p-3 text-left">性能等级</th>
+                                <th class="p-3 text-left">触发的流水线阶段</th>
+                                <th class="p-3 text-left">典型 CSS 属性</th>
+                                <th class="p-3 text-left">性能消耗</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-t">
+                                <td class="p-3"><span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-bold">最佳</span></td>
+                                <td class="p-3 font-mono text-xs">仅 Composite</td>
+                                <td class="p-3">transform, opacity, cursor, will-change</td>
+                                <td class="p-3">极低（GPU 处理）</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3"><span class="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-bold">中等</span></td>
+                                <td class="p-3 font-mono text-xs">Paint + Composite</td>
+                                <td class="p-3">color, background, border-color, box-shadow, visibility</td>
+                                <td class="p-3">中等（CPU 重绘）</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3"><span class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold">最差</span></td>
+                                <td class="p-3 font-mono text-xs">Layout + Paint + Composite</td>
+                                <td class="p-3">width, height, margin, padding, top, left, display, position, font-size, border-width</td>
+                                <td class="p-3">极高（全流水线）</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== 第二部分：关键渲染路径 ==================== -->
+        <section id="critical-path" class="mb-20 scroll-mt-24">
+            <div class="flex items-center mb-8">
+                <div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center mr-3">
+                    <i class="fa fa-bolt text-accent"></i>
+                </div>
+                <h2 class="text-2xl font-bold">二、关键渲染路径（Critical Rendering Path）</h2>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm p-6 highlight-box mb-6">
+                <p class="mb-6">
+                    <strong>关键渲染路径</strong> 是指浏览器将 HTML、CSS、JS 转换为屏幕上像素所经历的<strong>最小必要步骤序列</strong>。
+                    优化 CRP 的本质是：<span class="text-primary font-bold">减少到达首次渲染所需的"关键资源"数量和"关键路径长度"。</span>
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-red-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-red-500 mb-1">关键资源</div>
+                        <p class="text-sm text-gray-600">可能阻塞页面首次渲染的资源（CSS、同步 JS）</p>
+                    </div>
+                    <div class="bg-yellow-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-yellow-500 mb-1">关键路径长度</div>
+                        <p class="text-sm text-gray-600">获取所有关键资源所需的往返次数（RTT）</p>
+                    </div>
+                    <div class="bg-blue-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-blue-500 mb-1">关键字节</div>
+                        <p class="text-sm text-gray-600">完成首次渲染需要下载的总字节数</p>
+                    </div>
+                </div>
+
+                <h3 class="font-bold text-lg mb-4">CRP 优化三原则</h3>
+                <div class="space-y-3">
+                    <div class="flex items-start gap-3 bg-green-50 rounded-lg p-3">
+                        <span class="text-xl">1️⃣</span>
+                        <div>
+                            <strong>减少关键资源数量</strong>
+                            <p class="text-sm text-gray-600">内联关键 CSS、延迟加载非关键 CSS/JS、使用 async/defer</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3 bg-blue-50 rounded-lg p-3">
+                        <span class="text-xl">2️⃣</span>
+                        <div>
+                            <strong>缩短关键路径长度</strong>
+                            <p class="text-sm text-gray-600">减少资源链依赖（CSS 中不再 @import 其他 CSS）、合并请求</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3 bg-purple-50 rounded-lg p-3">
+                        <span class="text-xl">3️⃣</span>
+                        <div>
+                            <strong>减少关键字节大小</strong>
+                            <p class="text-sm text-gray-600">压缩（Gzip/Brotli）、Minify、Tree Shaking、Code Splitting</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 资源加载时序图 -->
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <h3 class="font-bold text-lg mb-4">资源加载对渲染的影响</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="p-3 text-left">资源类型</th>
+                                <th class="p-3 text-left">下载时机</th>
+                                <th class="p-3 text-left">是否阻塞解析</th>
+                                <th class="p-3 text-left">是否阻塞渲染</th>
+                                <th class="p-3 text-left">优化方式</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">&lt;link rel="stylesheet"&gt;</td>
+                                <td class="p-3">立即下载</td>
+                                <td class="p-3">❌ 不阻塞 DOM 解析</td>
+                                <td class="p-3 text-red-500 font-bold">✅ 阻塞渲染（Render Blocking）</td>
+                                <td class="p-3">内联关键 CSS、media 属性拆分</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">&lt;script&gt;（同步）</td>
+                                <td class="p-3">立即下载+执行</td>
+                                <td class="p-3 text-red-500 font-bold">✅ 阻塞 DOM 解析</td>
+                                <td class="p-3 text-red-500 font-bold">✅ 阻塞渲染</td>
+                                <td class="p-3">使用 async 或 defer</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">&lt;script async&gt;</td>
+                                <td class="p-3">异步下载，下载完立即执行</td>
+                                <td class="p-3">⚠️ 执行时阻塞</td>
+                                <td class="p-3">⚠️ 执行时阻塞</td>
+                                <td class="p-3">适用于独立脚本（如统计）</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">&lt;script defer&gt;</td>
+                                <td class="p-3">异步下载，DOM 解析完后执行</td>
+                                <td class="p-3">❌ 不阻塞</td>
+                                <td class="p-3">❌ 不阻塞</td>
+                                <td class="p-3 text-green-600 font-bold">最推荐</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">&lt;img&gt;</td>
+                                <td class="p-3">异步下载</td>
+                                <td class="p-3">❌ 不阻塞</td>
+                                <td class="p-3">❌ 不阻塞</td>
+                                <td class="p-3">lazy loading、WebP 格式</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">@font-face</td>
+                                <td class="p-3">延迟下载（按需）</td>
+                                <td class="p-3">❌ 不阻塞</td>
+                                <td class="p-3">⚠️ 可能阻塞文字显示</td>
+                                <td class="p-3">font-display: swap</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== 第三部分：首页为什么慢 ==================== -->
+        <section id="why-slow" class="mb-20 scroll-mt-24">
+            <div class="flex items-center mb-8">
+                <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mr-3">
+                    <i class="fa fa-question-circle text-danger"></i>
+                </div>
+                <h2 class="text-2xl font-bold">三、首页打开慢的 8 大根因</h2>
+            </div>
+
+            <!-- 原因1 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-5">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                        <span class="text-red-500 font-bold text-lg">1</span>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-lg mb-2 text-red-600">JavaScript 主包过大（Bundle Size）</h3>
+                        <p class="text-gray-700 mb-3">这是 SPA 应用首页慢的<strong>第一杀手</strong>。一个未经优化的 React/Vue 项目，初始 Bundle 动辄 500KB~2MB+。浏览器下载、解析、编译、执行这些 JS 会长时间阻塞主线程。</p>
+                        <div class="bg-gray-50 rounded-lg p-3 flex items-center gap-3 text-sm">
+                            <span class="font-bold">典型场景：</span>
+                            <span>create-react-app 默认打包 → 首次加载 1.2MB JS → 首屏白屏 3-5 秒</span>
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <span class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs">路由懒加载</span>
+                            <span class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs">Tree Shaking</span>
+                            <span class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs">Code Splitting</span>
+                            <span class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs">动态 import()</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 原因2 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-5">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+                        <span class="text-orange-500 font-bold text-lg">2</span>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-lg mb-2 text-orange-600">渲染阻塞资源（Render-Blocking）</h3>
+                        <p class="text-gray-700 mb-3">外部 CSS 和同步 JavaScript 会阻塞首次渲染。尤其是 <code>&lt;head&gt;</code> 中的大 CSS 文件，在下载完成前浏览器<strong>不会渲染任何像素</strong>。</p>
+                        <div class="bg-gray-50 rounded-lg p-3 text-sm font-mono">
+                            &lt;!-- ❌ 这个 200KB 的 CSS 会阻塞整个首屏 --&gt;<br>
+                            &lt;link rel="stylesheet" href="/styles.css"&gt;<br><br>
+                            &lt;!-- ✅ 拆分：关键 CSS 内联 + 非关键 CSS 延迟加载 --&gt;<br>
+                            &lt;style&gt;/* 首屏关键样式 */&lt;/style&gt;<br>
+                            &lt;link rel="preload" href="/styles.css" as="style" onload="this.rel='stylesheet'"&gt;
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 原因3 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-5">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                        <span class="text-yellow-600 font-bold text-lg">3</span>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-lg mb-2 text-yellow-600">HTTP 请求瀑布流（Waterfall）过长</h3>
+                        <p class="text-gray-700 mb-3">页面资源越多，HTTP 请求链越长。每个请求有 DNS 解析、TCP 握手、TLS 协商的固定开销（~50-200ms）。30+ 个独立请求 + 串行依赖 → 加载时间急剧膨胀。</p>
+                        <div class="bg-gray-50 rounded-lg p-3 flex items-center gap-3 text-sm">
+                            <span class="font-bold">典型场景：</span>
+                            <span>首页加载 40+ 个 JS chunk + 20+ 个图片 + 5+ 个 CSS → 请求瀑布流长达数秒</span>
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <span class="px-2 py-1 bg-yellow-50 text-yellow-600 rounded text-xs">HTTP/2 多路复用</span>
+                            <span class="px-2 py-1 bg-yellow-50 text-yellow-600 rounded text-xs">资源合并</span>
+                            <span class="px-2 py-1 bg-yellow-50 text-yellow-600 rounded text-xs">CDN 加速</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 原因4 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-5">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <span class="text-green-600 font-bold text-lg">4</span>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-lg mb-2 text-green-600">图片未优化（Images）</h3>
+                        <p class="text-gray-700 mb-3">图片通常占据页面总大小的 <strong>60%-80%</strong>。未压缩的 2MB PNG 首页 Banner、未使用现代格式（WebP/AVIF）、未做懒加载——这三个问题加起来能将首屏时间拖慢 2-5 秒。</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                            <div class="bg-green-50 rounded p-2">✅ WebP/AVIF 比 PNG 小 ~60%</div>
+                            <div class="bg-green-50 rounded p-2">✅ loading="lazy" 延迟加载</div>
+                            <div class="bg-green-50 rounded p-2">✅ srcset + 响应式图片</div>
+                            <div class="bg-green-50 rounded p-2">✅ CDN 图片处理（缩放/压缩）</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 原因5 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-5">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                        <span class="text-blue-600 font-bold text-lg">5</span>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-lg mb-2 text-blue-600">服务端响应慢（TTFB 过高）</h3>
+                        <p class="text-gray-700 mb-3">Time to First Byte（TTFB）是从请求发出到收到第一个字节的时间。好的 TTFB 应该在 <strong>200ms 以内</strong>，超过 800ms 就有问题。原因包括：服务器处理慢、数据库查询慢、未做 SSR/SSG、无 CDN。</p>
+                        <div class="bg-gray-50 rounded-lg p-3 text-sm">
+                            <span class="font-bold">优化：</span>SSR/SSG 预渲染、CDN 边缘缓存、API 响应缓存（Redis）、数据库索引优化
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 原因6 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-5">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <span class="text-purple-600 font-bold text-lg">6</span>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-lg mb-2 text-purple-600">第三方脚本（Third-Party Scripts）</h3>
+                        <p class="text-gray-700 mb-3">统计（GA/百度统计）、客服（企业微信/IM）、广告 SDK、监控（Sentry）、A/B 测试——这些第三方脚本每个都是<strong>独立的网络请求 + JS 执行</strong>，阻塞主线程。</p>
+                        <div class="bg-red-50 rounded-lg p-3 text-sm flex items-center gap-2">
+                            <i class="fa fa-warning text-red-500"></i>
+                            <span>一个 Google Analytics 脚本就可能增加 200-500ms 的加载时间。累积 3-5 个第三方脚本，首屏时间可以直接翻倍。</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 原因7 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-5">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-full bg-pink-100 flex items-center justify-center flex-shrink-0">
+                        <span class="text-pink-600 font-bold text-lg">7</span>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-lg mb-2 text-pink-600">布局抖动与强制同步布局（Layout Thrashing）</h3>
+                        <p class="text-gray-700 mb-3">在 JS 中先<strong>读取</strong>布局属性（如 offsetWidth），再<strong>修改</strong>样式，再<strong>读取</strong>——每次读取都会强制浏览器立即执行同步布局，导致<strong>多次不必要的 Reflow</strong>。</p>
+                        <div class="bg-gray-50 rounded-lg p-3 text-sm font-mono">
+                            <span class="text-red-500">// ❌ 布局抖动：每次循环触发一次 Reflow</span><br>
+                            elements.forEach(el => {<br>
+                            &nbsp;&nbsp;const w = el.offsetWidth;  // 强制布局<br>
+                            &nbsp;&nbsp;el.style.width = w + 10 + 'px';  // 修改样式<br>
+                            });<br><br>
+                            <span class="text-green-500">// ✅ 先批量读取，再批量写入</span><br>
+                            const widths = elements.map(el => el.offsetWidth);<br>
+                            elements.forEach((el, i) => el.style.width = widths[i] + 10 + 'px');
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 原因8 -->
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+                        <span class="text-teal-600 font-bold text-lg">8</span>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-lg mb-2 text-teal-600">Web 字体阻塞文字渲染（FOIT）</h3>
+                        <p class="text-gray-700 mb-3">在 Web 字体下载完成前，浏览器可能<strong>完全不显示文字</strong>（Flash of Invisible Text）。中文字体文件动辄 3-10MB，严重影响首屏体验。</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                            <div class="bg-teal-50 rounded p-2">✅ font-display: swap（立即显示回退字体）</div>
+                            <div class="bg-teal-50 rounded p-2">✅ 字体子集化（只包含需要的字符）</div>
+                            <div class="bg-teal-50 rounded p-2">✅ 预连接字体 CDN（preconnect）</div>
+                            <div class="bg-teal-50 rounded p-2">✅ WOFF2 格式（比 TTF 小 30%）</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== 第四部分：优化策略 ==================== -->
+        <section id="optimize" class="mb-20 scroll-mt-24">
+            <div class="flex items-center mb-8">
+                <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
+                    <i class="fa fa-rocket text-secondary"></i>
+                </div>
+                <h2 class="text-2xl font-bold">四、首页性能优化实战清单</h2>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm p-6 highlight-box">
+                <p class="mb-6 text-gray-600">按优先级从高到低排列，每一项都有明确的性能收益预估。</p>
+
+                <div class="space-y-4">
+                    <!-- 优化1 -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-lg">🔴 P0：代码分割 + 路由懒加载</h3>
+                            <span class="px-2 py-0.5 bg-red-100 text-red-600 rounded text-xs font-bold">收益：-50%~70% Bundle</span>
+                        </div>
+                        <div class="bg-gray-800 text-gray-100 p-3 rounded text-sm font-mono mb-2">
+                            <span class="text-gray-500">// React 路由懒加载</span><br>
+                            const Home = lazy(() => import('./pages/Home'));<br>
+                            const About = lazy(() => import('./pages/About'));
+                        </div>
+                        <p class="text-sm text-gray-600">每个路由独立成一个 chunk，用户访问哪个路由才加载哪个。</p>
+                    </div>
+
+                    <!-- 优化2 -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-lg">🔴 P0：关键 CSS 内联 + 非关键 CSS 延迟</h3>
+                            <span class="px-2 py-0.5 bg-red-100 text-red-600 rounded text-xs font-bold">收益：FCP 提前 0.5~2s</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-2">使用 Critical / PurgeCSS 提取首屏 CSS 并内联到 <code>&lt;head&gt;</code>，其余 CSS 通过 <code>preload</code> + <code>onload</code> 异步加载。</p>
+                        <div class="bg-gray-800 text-gray-100 p-3 rounded text-sm font-mono">
+                            &lt;link rel="preload" href="/styles.css" as="style" <br>
+                            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;onload="this.onload=null;this.rel='stylesheet'"&gt;
+                        </div>
+                    </div>
+
+                    <!-- 优化3 -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-lg">🟡 P1：图片全面优化</h3>
+                            <span class="px-2 py-0.5 bg-yellow-100 text-yellow-600 rounded text-xs font-bold">收益：-60% 图片体积</span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                            <div class="bg-gray-50 rounded p-2">✅ 使用 WebP/AVIF 替代 PNG/JPEG</div>
+                            <div class="bg-gray-50 rounded p-2">✅ 添加 loading="lazy"</div>
+                            <div class="bg-gray-50 rounded p-2">✅ 使用 srcset 响应式图片</div>
+                            <div class="bg-gray-50 rounded p-2">✅ 使用 &lt;picture&gt; 标签</div>
+                        </div>
+                    </div>
+
+                    <!-- 优化4 -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-lg">🟡 P1：资源预加载与预连接</h3>
+                            <span class="px-2 py-0.5 bg-yellow-100 text-yellow-600 rounded text-xs font-bold">收益：提前 DNS/TCP/TLS</span>
+                        </div>
+                        <div class="bg-gray-800 text-gray-100 p-3 rounded text-sm font-mono">
+                            &lt;link rel="preconnect" href="https://api.example.com"&gt;<br>
+                            &lt;link rel="dns-prefetch" href="https://cdn.example.com"&gt;<br>
+                            &lt;link rel="preload" href="/hero-banner.webp" as="image"&gt;
+                        </div>
+                    </div>
+
+                    <!-- 优化5 -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-lg">🟡 P1：第三方脚本异步加载 / 延迟加载</h3>
+                            <span class="px-2 py-0.5 bg-yellow-100 text-yellow-600 rounded text-xs font-bold">收益：减少主线程阻塞</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-2">统计、客服等非关键第三方脚本使用 <code>async</code> 或 <code>defer</code>，甚至放到 <code>requestIdleCallback</code> 中执行。</p>
+                    </div>
+
+                    <!-- 优化6 -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-lg">🟢 P2：SSR / SSG / ISR 预渲染</h3>
+                            <span class="px-2 py-0.5 bg-green-100 text-green-600 rounded text-xs font-bold">收益：TTFB &lt; 100ms</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-2">Next.js（React）或 Nuxt.js（Vue）的 SSR/SSG 能力，将首屏 HTML 在服务端/构建时提前生成，浏览器收到后直接渲染。</p>
+                        <div class="flex gap-2 text-xs">
+                            <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded">SSR：每次请求动态渲染</span>
+                            <span class="px-2 py-1 bg-green-50 text-green-600 rounded">SSG：构建时静态生成</span>
+                            <span class="px-2 py-1 bg-purple-50 text-purple-600 rounded">ISR：增量静态再生成</span>
+                        </div>
+                    </div>
+
+                    <!-- 优化7 -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-lg">🟢 P2：HTTP/2 + Gzip/Brotli + CDN</h3>
+                            <span class="px-2 py-0.5 bg-green-100 text-green-600 rounded text-xs font-bold">收益：传输速度提升 2~5x</span>
+                        </div>
+                        <p class="text-sm text-gray-600">启用 HTTP/2 多路复用消除队头阻塞，Brotli 比 Gzip 压缩率高 20%，CDN 将资源分发到离用户最近的节点。</p>
+                    </div>
+
+                    <!-- 优化8 -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-lg">🟢 P2：避免布局抖动</h3>
+                            <span class="px-2 py-0.5 bg-green-100 text-green-600 rounded text-xs font-bold">收益：减少不必要的 Reflow</span>
+                        </div>
+                        <p class="text-sm text-gray-600">使用 <code>requestAnimationFrame</code> 批量更新 DOM，先读取后写入（FastDOM 模式），对频繁动画使用 <code>transform</code> 而非 <code>left/top</code>。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== 第五部分：DevTools 实战 ==================== -->
+        <section id="devtools" class="mb-20 scroll-mt-24">
+            <div class="flex items-center mb-8">
+                <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center mr-3">
+                    <i class="fa fa-search text-warning"></i>
+                </div>
+                <h2 class="text-2xl font-bold">五、Chrome DevTools 性能排查实战</h2>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-6 highlight-box">
+                <h3 class="font-bold text-lg mb-4">核心性能指标（Core Web Vitals）</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-blue-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-blue-600 mb-1">LCP</div>
+                        <div class="text-sm font-bold mb-1">Largest Contentful Paint</div>
+                        <p class="text-xs text-gray-600">最大内容绘制时间<br><span class="text-green-600 font-bold">良好：&lt; 2.5s</span></p>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-purple-600 mb-1">FID</div>
+                        <div class="text-sm font-bold mb-1">First Input Delay</div>
+                        <p class="text-xs text-gray-600">首次输入延迟<br><span class="text-green-600 font-bold">良好：&lt; 100ms</span></p>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-green-600 mb-1">CLS</div>
+                        <div class="text-sm font-bold mb-1">Cumulative Layout Shift</div>
+                        <p class="text-xs text-gray-600">累积布局偏移<br><span class="text-green-600 font-bold">良好：&lt; 0.1</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+                <h3 class="font-bold text-lg mb-4">DevTools Performance 面板分析步骤</h3>
+                <div class="space-y-4">
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0 font-bold">1</div>
+                        <div>
+                            <strong>打开 Performance 面板</strong>
+                            <p class="text-sm text-gray-600">F12 → Performance 标签 → 点击录制按钮 → 刷新页面 → 停止录制</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0 font-bold">2</div>
+                        <div>
+                            <strong>查看 FCP / LCP 时间线</strong>
+                            <p class="text-sm text-gray-600">在 Timings 轨道查看 FCP（首次内容绘制）和 LCP（最大内容绘制）的标记点</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0 font-bold">3</div>
+                        <div>
+                            <strong>分析 Main 线程活动</strong>
+                            <p class="text-sm text-gray-600">展开 Main 轨道，查看 JS 执行（黄色）、样式计算（紫色）、布局（紫色）、绘制（绿色）的耗时分布</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0 font-bold">4</div>
+                        <div>
+                            <strong>识别长任务（Long Task）</strong>
+                            <p class="text-sm text-gray-600">超过 50ms 的任务会被标记为红色角标 → 这是阻塞主线程的元凶</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0 font-bold">5</div>
+                        <div>
+                            <strong>使用 Lighthouse 生成报告</strong>
+                            <p class="text-sm text-gray-600">Lighthouse 标签 → Generate Report → 自动诊断并提供优化建议</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <h3 class="font-bold text-lg mb-4">常用性能排查命令</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="p-3 text-left">场景</th>
+                                <th class="p-3 text-left">DevTools 位置</th>
+                                <th class="p-3 text-left">说明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">查看渲染性能</td>
+                                <td class="p-3">Performance 面板 → 录制</td>
+                                <td class="p-3">查看 FCP/LCP、主线程活动、布局/绘制耗时</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">查看网络请求瀑布流</td>
+                                <td class="p-3">Network 面板</td>
+                                <td class="p-3">按时间线查看每个资源的加载顺序和耗时</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">查看 Bundle 组成</td>
+                                <td class="p-3">Network → JS 文件 → 查看大小</td>
+                                <td class="p-3">或用 webpack-bundle-analyzer 可视化</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">实时监控 FPS</td>
+                                <td class="p-3">Cmd+Shift+P → Show FPS Meter</td>
+                                <td class="p-3">查看页面滚动的帧率</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">查看重绘区域</td>
+                                <td class="p-3">Cmd+Shift+P → Show Paint Rectangles</td>
+                                <td class="p-3">绿色闪动区域 = 发生重绘的部分</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">查看图层</td>
+                                <td class="p-3">Cmd+Shift+P → Show Layers Borders</td>
+                                <td class="p-3">橙色边框 = GPU 合成层</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">模拟慢网络</td>
+                                <td class="p-3">Network → Throttling → Slow 3G</td>
+                                <td class="p-3">模拟低端网络环境测试首屏体验</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">模拟低端 CPU</td>
+                                <td class="p-3">Performance → CPU throttling → 4x slowdown</td>
+                                <td class="p-3">模拟低性能设备</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="p-3 font-bold">Coverage 分析</td>
+                                <td class="p-3">Cmd+Shift+P → Show Coverage</td>
+                                <td class="p-3">查看 CSS/JS 代码使用率，找出死代码</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 总结 -->
+        <section class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-white text-center">
+            <h2 class="text-2xl font-bold mb-4">总结：首页优化的核心思路</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-left">
+                <div class="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
+                    <div class="text-3xl mb-2">📦</div>
+                    <h3 class="font-bold mb-1">减体积</h3>
+                    <p class="text-sm text-white/80">Code Splitting、Tree Shaking、图片压缩、Gzip/Brotli</p>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
+                    <div class="text-3xl mb-2">🔗</div>
+                    <h3 class="font-bold mb-1">减请求</h3>
+                    <p class="text-sm text-white/80">合并资源、HTTP/2、CDN、缓存策略</p>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
+                    <div class="text-3xl mb-2">⚡</div>
+                    <h3 class="font-bold mb-1">减阻塞</h3>
+                    <p class="text-sm text-white/80">关键 CSS 内联、async/defer、SSR/SSG 预渲染</p>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
+                    <div class="text-3xl mb-2">🎯</div>
+                    <h3 class="font-bold mb-1">早渲染</h3>
+                    <p class="text-sm text-white/80">骨架屏、预加载、Lazy Loading、Intersection Observer</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-neutral text-white py-10 mt-12">
+        <div class="max-w-5xl mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-4 md:mb-0">
+                    <span class="font-bold text-lg">浏览器渲染与性能优化</span>
+                    <p class="text-gray-400 text-sm mt-1">架构师学习笔记</p>
+                </div>
+                <div class="flex gap-4 text-sm text-gray-400">
+                    <a href="#pipeline" class="hover:text-white transition-colors">渲染流水线</a>
+                    <a href="#critical-path" class="hover:text-white transition-colors">关键渲染路径</a>
+                    <a href="#why-slow" class="hover:text-white transition-colors">首页为什么慢</a>
+                    <a href="#optimize" class="hover:text-white transition-colors">优化策略</a>
+                    <a href="#devtools" class="hover:text-white transition-colors">DevTools</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    window.scrollTo({
+                        top: target.offsetTop - 80,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+
+        // 滚动高亮
+        window.addEventListener('scroll', function() {
+            const sections = document.querySelectorAll('section[id]');
+            sections.forEach(section => {
+                const top = section.offsetTop - 120;
+                const id = section.getAttribute('id');
+                const links = document.querySelectorAll(`a[href="#${id}"]`);
+                if (window.scrollY >= top && window.scrollY < top + section.offsetHeight) {
+                    links.forEach(l => l.classList.add('text-primary', 'font-bold'));
+                } else {
+                    links.forEach(l => l.classList.remove('text-primary', 'font-bold'));
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一个请求是如何抵达后端服务器的 - 架构师学习笔记</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --phase1: #3B82F6;
+            --phase2: #8B5CF6;
+            --phase3: #F59E0B;
+            --phase4: #10B981;
+        }
+        .step-card {
+            transition: all 0.3s ease;
+        }
+        .step-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+        }
+        .phase-1 { border-left: 4px solid var(--phase1); }
+        .phase-2 { border-left: 4px solid var(--phase2); }
+        .phase-3 { border-left: 4px solid var(--phase3); }
+        .phase-4 { border-left: 4px solid var(--phase4); }
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+        .flow-node {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            white-space: nowrap;
+        }
+        .highlight-box {
+            border-left: 4px solid #3B82F6;
+            background: linear-gradient(135deg, rgba(59,130,246,0.06), rgba(59,130,246,0.02));
+        }
+        .tag {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        table {
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px 14px;
+            border: 1px solid #e2e8f0;
+        }
+        th {
+            background: #f8fafc;
+            font-weight: 600;
+            text-align: left;
+        }
+        .nav-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+<!-- 顶部概览横幅 -->
+<header class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white">
+    <div class="max-w-5xl mx-auto px-6 py-14">
+        <h1 class="text-3xl md:text-4xl font-bold mb-3">
+            <i class="fas fa-route mr-3"></i>一个请求是如何抵达后端服务器的
+        </h1>
+        <p class="text-blue-100 text-lg mb-6">
+            从浏览器输入 URL 到后端业务代码执行，完整拆解请求链路的 15 个关键环节
+        </p>
+        <div class="flex flex-wrap gap-3 text-sm">
+            <span class="bg-white/20 backdrop-blur-sm px-4 py-1.5 rounded-full"><i class="fas fa-globe mr-1"></i>DNS / TCP / TLS</span>
+            <span class="bg-white/20 backdrop-blur-sm px-4 py-1.5 rounded-full"><i class="fas fa-shield-haltered mr-1"></i>防火墙 / WAF</span>
+            <span class="bg-white/20 backdrop-blur-sm px-4 py-1.5 rounded-full"><i class="fas fa-balance-scale mr-1"></i>负载均衡</span>
+            <span class="bg-white/20 backdrop-blur-sm px-4 py-1.5 rounded-full"><i class="fas fa-network-wired mr-1"></i>API 网关</span>
+            <span class="bg-white/20 backdrop-blur-sm px-4 py-1.5 rounded-full"><i class="fas fa-server mr-1"></i>微服务 / DB</span>
+        </div>
+    </div>
+</header>
+
+<div class="max-w-5xl mx-auto px-4 py-10">
+
+    <!-- ==================== 全景流程图 ==================== -->
+    <section class="bg-white rounded-2xl shadow-sm p-6 md:p-8 mb-8">
+        <h2 class="text-2xl font-bold mb-1">请求链路全景图</h2>
+        <p class="text-gray-500 text-sm mb-6">一条 HTTP 请求从浏览器出发，穿越互联网和企业基础设施，最终抵达后端服务器</p>
+
+        <!-- 四阶段横向流程 -->
+        <div class="overflow-x-auto pb-4">
+            <div class="flex items-start gap-0 min-w-[900px] text-sm">
+                <!-- 阶段一：浏览器端 -->
+                <div class="flex-shrink-0 text-center" style="width:200px">
+                    <div class="bg-blue-50 rounded-xl p-3 mb-2">
+                        <div class="text-blue-600 font-bold mb-2 text-xs uppercase tracking-wide">阶段一 · 浏览器端</div>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">1. URL 解析</div>
+                            <div class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">2. DNS 解析</div>
+                            <div class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">3. TCP 三次握手</div>
+                            <div class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">4. TLS 握手</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 箭头 -->
+                <div class="flex-shrink-0 flex items-center pt-10" style="width:40px">
+                    <div class="text-blue-300 text-2xl">⟶</div>
+                </div>
+                <!-- 阶段二：网络传输 -->
+                <div class="flex-shrink-0 text-center" style="width:180px">
+                    <div class="bg-purple-50 rounded-xl p-3 mb-2">
+                        <div class="text-purple-600 font-bold mb-2 text-xs uppercase tracking-wide">阶段二 · 网络传输</div>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="bg-purple-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">5. HTTP 请求构造</div>
+                            <div class="bg-purple-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">6. 网络路由</div>
+                            <div class="bg-purple-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">7. 防火墙 / WAF</div>
+                            <div class="bg-purple-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">8. CDN (可选)</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 箭头 -->
+                <div class="flex-shrink-0 flex items-center pt-10" style="width:40px">
+                    <div class="text-purple-300 text-2xl">⟶</div>
+                </div>
+                <!-- 阶段三：企业基础设施 -->
+                <div class="flex-shrink-0 text-center" style="width:220px">
+                    <div class="bg-amber-50 rounded-xl p-3 mb-2">
+                        <div class="text-amber-600 font-bold mb-2 text-xs uppercase tracking-wide">阶段三 · 企业基础设施</div>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">9. 负载均衡 L4/L7</div>
+                            <div class="bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">10. API 网关</div>
+                            <div class="bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">11. 服务发现</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 箭头 -->
+                <div class="flex-shrink-0 flex items-center pt-10" style="width:40px">
+                    <div class="text-amber-300 text-2xl">⟶</div>
+                </div>
+                <!-- 阶段四：后端服务 -->
+                <div class="flex-shrink-0 text-center" style="width:220px">
+                    <div class="bg-emerald-50 rounded-xl p-3 mb-2">
+                        <div class="text-emerald-600 font-bold mb-2 text-xs uppercase tracking-wide">阶段四 · 后端服务</div>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">12. 线程池 & Filter</div>
+                            <div class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">13. 中间件链</div>
+                            <div class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">14. Controller → Service</div>
+                            <div class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">15. DB / Cache / MQ</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 阶段一：浏览器端 ==================== -->
+    <section class="mb-8">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white font-bold text-lg">1</div>
+            <div>
+                <h2 class="text-xl font-bold text-gray-800">阶段一：浏览器端 —— 请求的诞生</h2>
+                <p class="text-sm text-gray-500">用户操作触发请求，浏览器完成 DNS、TCP、TLS 一系列准备工作</p>
+            </div>
+        </div>
+
+        <!-- 1.1 URL 解析 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-1 step-card">
+            <h3 class="font-bold text-lg mb-3">
+                <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">1.1</span>
+                URL 输入与解析
+            </h3>
+            <p class="text-gray-600 mb-4">用户在地址栏输入 <code class="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-sm">https://www.example.com/api/order/create</code>，浏览器首先解析这个 URL：</p>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th>组成部分</th><th>内容</th><th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="font-mono text-blue-600">协议</td><td><code>https</code></td><td>HTTPS = HTTP + TLS，默认端口 443</td></tr>
+                        <tr><td class="font-mono text-blue-600">域名</td><td><code>www.example.com</code></td><td>需通过 DNS 解析为 IP</td></tr>
+                        <tr><td class="font-mono text-blue-600">端口</td><td><code>443</code>（默认）</td><td>HTTPS 默认 443，HTTP 默认 80</td></tr>
+                        <tr><td class="font-mono text-blue-600">路径</td><td><code>/api/order/create</code></td><td>后端 API 接口路径</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-gray-500 text-xs mt-3"><i class="fas fa-info-circle mr-1"></i>浏览器还会检查 HSTS 列表，若该域名在列表中则强制使用 HTTPS。</p>
+        </div>
+
+        <!-- 1.2 DNS 解析 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-1 step-card">
+            <h3 class="font-bold text-lg mb-3">
+                <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">1.2</span>
+                DNS 域名解析
+            </h3>
+            <p class="text-gray-600 mb-4">将域名转换为 IP 地址，采用<strong>逐级缓存查询</strong>的策略：</p>
+            <div class="bg-slate-50 rounded-xl p-5 mb-4 overflow-x-auto">
+                <div class="flex items-center gap-2 text-sm min-w-[720px]">
+                    <div class="bg-blue-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">浏览器 DNS 缓存</div>
+                    <span class="text-gray-400">→ 未命中 →</span>
+                    <div class="bg-blue-400 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">OS DNS 缓存 (hosts)</div>
+                    <span class="text-gray-400">→ 未命中 →</span>
+                    <div class="bg-indigo-400 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">本地 DNS 服务器</div>
+                    <span class="text-gray-400">→ 未命中 →</span>
+                    <div class="bg-purple-400 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">根域名服务器</div>
+                    <span class="text-gray-400">→</span>
+                    <div class="bg-purple-400 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">.com 顶级域</div>
+                    <span class="text-gray-400">→</span>
+                    <div class="bg-purple-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">权威 DNS</div>
+                    <span class="text-gray-400">→</span>
+                    <div class="bg-green-500 text-white px-3 py-2 rounded-lg font-bold whitespace-nowrap">返回 IP ✓</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-gray-500">
+                <div class="bg-gray-50 rounded-lg p-3"><i class="fas fa-clock text-blue-400 mr-1"></i><strong>UDP 协议</strong>（端口 53），超 512 字节切 TCP</div>
+                <div class="bg-gray-50 rounded-lg p-3"><i class="fas fa-sync-alt text-blue-400 mr-1"></i><strong>TTL 控制</strong>缓存有效期</div>
+                <div class="bg-gray-50 rounded-lg p-3"><i class="fas fa-shield-alt text-blue-400 mr-1"></i><strong>HTTPDNS</strong> 可绕过运营商劫持</div>
+            </div>
+        </div>
+
+        <!-- 1.3 TCP 三次握手 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-1 step-card">
+            <h3 class="font-bold text-lg mb-3">
+                <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">1.3</span>
+                TCP 三次握手
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex items-center gap-3 bg-blue-50 rounded-lg p-3">
+                            <span class="bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                            <span>客户端 → <strong>SYN (seq=x)</strong> → 服务器</span>
+                        </div>
+                        <div class="flex items-center gap-3 bg-indigo-50 rounded-lg p-3">
+                            <span class="bg-indigo-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                            <span>客户端 ← <strong>SYN+ACK (seq=y, ack=x+1)</strong> ← 服务器</span>
+                        </div>
+                        <div class="flex items-center gap-3 bg-green-50 rounded-lg p-3">
+                            <span class="bg-green-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                            <span>客户端 → <strong>ACK (ack=y+1)</strong> → 服务器 ✓</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+                    <p class="font-bold text-amber-700 mb-1"><i class="fas fa-question-circle mr-1"></i>为什么是三次，不是两次或四次？</p>
+                    <p class="text-amber-600 text-xs">两次无法防止历史连接（已失效的 SYN 到达服务端，服务端误以为新连接）；四次则冗余——第三次握手时双方已确认收发能力正常。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 1.4 TLS 握手 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-1 step-card">
+            <h3 class="font-bold text-lg mb-3">
+                <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">1.4</span>
+                TLS / SSL 握手（HTTPS）
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div class="space-y-2 text-sm">
+                    <div class="bg-slate-50 rounded-lg p-3 flex items-center gap-2">
+                        <span class="text-blue-500"><i class="fas fa-arrow-right"></i></span> ClientHello —— 发送支持的加密套件
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-3 flex items-center gap-2">
+                        <span class="text-blue-500"><i class="fas fa-arrow-left"></i></span> ServerHello + 数字证书
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-3 flex items-center gap-2">
+                        <span class="text-blue-500"><i class="fas fa-arrow-right"></i></span> 验证证书 → 生成对称密钥
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-3 flex items-center gap-2">
+                        <span class="text-green-500"><i class="fas fa-check-circle"></i></span> 加密通信就绪 ✓
+                    </div>
+                </div>
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4 text-sm">
+                    <p class="font-bold text-green-700 mb-1"><i class="fas fa-bolt mr-1"></i>TLS 1.3 优化</p>
+                    <p class="text-green-600 text-xs">TLS 1.3 将握手从 2-RTT 优化至 <strong>1-RTT</strong>，大幅降低连接延迟。还支持 0-RTT 会话恢复。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 阶段二：网络传输 ==================== -->
+    <section class="mb-8">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 rounded-xl bg-purple-500 flex items-center justify-center text-white font-bold text-lg">2</div>
+            <div>
+                <h2 class="text-xl font-bold text-gray-800">阶段二：网络传输 —— 穿越互联网</h2>
+                <p class="text-sm text-gray-500">数据包通过运营商网络，穿越重重路由节点，最终到达目标数据中心</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <!-- 2.1 HTTP 请求构造 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 phase-2 step-card">
+                <h3 class="font-bold text-lg mb-3">
+                    <span class="bg-purple-100 text-purple-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">2.1</span>
+                    HTTP 请求构造
+                </h3>
+                <div class="code-block p-4 text-xs">
+<span class="text-yellow-400">POST</span> <span class="text-green-400">/api/order/create</span> <span class="text-gray-400">HTTP/1.1</span>
+<span class="text-cyan-400">Host:</span> www.example.com
+<span class="text-cyan-400">Content-Type:</span> application/json
+<span class="text-cyan-400">Authorization:</span> Bearer eyJhbG...
+<span class="text-cyan-400">Cookie:</span> session_id=abc123
+
+<span class="text-gray-500">{ "productId": 10086, "quantity": 2 }</span>
+                </div>
+                <p class="text-xs text-gray-400 mt-3">报文 → TCP 分段 → 添加 IP 头 → 数据包 → 网卡发出电/光信号</p>
+            </div>
+
+            <!-- 2.2 路由路径 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 phase-2 step-card">
+                <h3 class="font-bold text-lg mb-3">
+                    <span class="bg-purple-100 text-purple-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">2.2</span>
+                    网络路由路径
+                </h3>
+                <div class="text-sm space-y-1.5">
+                    <div class="flex items-center gap-2"><i class="fas fa-home text-purple-400 w-5 text-center"></i> 家庭路由器</div>
+                    <div class="flex items-center gap-2"><i class="fas fa-chevron-down text-gray-300 w-5 text-center"></i></div>
+                    <div class="flex items-center gap-2"><i class="fas fa-building text-purple-400 w-5 text-center"></i> 小区 / 运营商接入层</div>
+                    <div class="flex items-center gap-2"><i class="fas fa-chevron-down text-gray-300 w-5 text-center"></i></div>
+                    <div class="flex items-center gap-2"><i class="fas fa-globe text-purple-400 w-5 text-center"></i> 运营商骨干网</div>
+                    <div class="flex items-center gap-2"><i class="fas fa-chevron-down text-gray-300 w-5 text-center"></i></div>
+                    <div class="flex items-center gap-2"><i class="fas fa-exchange-alt text-purple-400 w-5 text-center"></i> 互联网交换中心 (IXP)</div>
+                    <div class="flex items-center gap-2"><i class="fas fa-chevron-down text-gray-300 w-5 text-center"></i></div>
+                    <div class="flex items-center gap-2"><i class="fas fa-cloud text-purple-400 w-5 text-center"></i> 数据中心边界路由器</div>
+                </div>
+                <p class="text-xs text-gray-400 mt-3">跨省请求通常经过 <strong>10~20 个路由节点</strong>，BGP 协议负责跨运营商路由选择。</p>
+            </div>
+        </div>
+
+        <!-- 2.3 防火墙 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-2 step-card">
+            <h3 class="font-bold text-lg mb-3">
+                <span class="bg-purple-100 text-purple-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">2.3</span>
+                防火墙 & WAF —— 安全第一道关
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-red-50 rounded-xl p-4 text-center">
+                    <i class="fas fa-filter text-red-400 text-2xl mb-2 block"></i>
+                    <h4 class="font-bold text-sm mb-1">网络层防火墙</h4>
+                    <p class="text-xs text-gray-500">基于 IP + 端口过滤 (iptables / 安全组)</p>
+                </div>
+                <div class="bg-orange-50 rounded-xl p-4 text-center">
+                    <i class="fas fa-bug text-orange-400 text-2xl mb-2 block"></i>
+                    <h4 class="font-bold text-sm mb-1">应用层防火墙 (WAF)</h4>
+                    <p class="text-xs text-gray-500">检测 SQL 注入、XSS、CSRF 等攻击</p>
+                </div>
+                <div class="bg-amber-50 rounded-xl p-4 text-center">
+                    <i class="fas fa-shield-virus text-amber-400 text-2xl mb-2 block"></i>
+                    <h4 class="font-bold text-sm mb-1">DDoS 防护</h4>
+                    <p class="text-xs text-gray-500">识别并清洗大流量攻击</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 阶段三：企业基础设施 ==================== -->
+    <section class="mb-8">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-white font-bold text-lg">3</div>
+            <div>
+                <h2 class="text-xl font-bold text-gray-800">阶段三：企业基础设施 —— 层层把关</h2>
+                <p class="text-sm text-gray-500">请求进入数据中心后，经过负载均衡、API 网关、服务发现等组件的层层处理</p>
+            </div>
+        </div>
+
+        <!-- 3.1 负载均衡 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-3 step-card">
+            <h3 class="font-bold text-lg mb-4">
+                <span class="bg-amber-100 text-amber-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">3.1</span>
+                负载均衡 —— L4 vs L7
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                <div class="border border-amber-200 bg-amber-50/30 rounded-lg p-4">
+                    <h4 class="font-bold text-amber-700 mb-2"><i class="fas fa-layer-group mr-1"></i>四层负载均衡 (L4)</h4>
+                    <p class="text-xs text-gray-600 mb-2">基于 IP + 端口转发，无法识别应用层内容</p>
+                    <div class="flex flex-wrap gap-1.5">
+                        <span class="tag bg-amber-100 text-amber-700">LVS</span>
+                        <span class="tag bg-amber-100 text-amber-700">F5</span>
+                        <span class="tag bg-amber-100 text-amber-700">云 SLB</span>
+                    </div>
+                </div>
+                <div class="border border-amber-200 bg-amber-50/30 rounded-lg p-4">
+                    <h4 class="font-bold text-amber-700 mb-2"><i class="fas fa-code mr-1"></i>七层负载均衡 (L7)</h4>
+                    <p class="text-xs text-gray-600 mb-2">基于 URL / Header / Cookie 智能路由</p>
+                    <div class="flex flex-wrap gap-1.5">
+                        <span class="tag bg-amber-100 text-amber-700">Nginx</span>
+                        <span class="tag bg-amber-100 text-amber-700">HAProxy</span>
+                        <span class="tag bg-amber-100 text-amber-700">Traefik</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 负载均衡算法 -->
+            <h4 class="font-bold text-sm mb-3 text-gray-700">常见负载均衡算法</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
+                <div class="bg-slate-50 rounded-lg p-3 text-center text-xs">
+                    <i class="fas fa-redo-alt text-amber-400 mb-1 block text-lg"></i>
+                    <strong>轮询</strong><br><span class="text-gray-500">依次分配</span>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-3 text-center text-xs">
+                    <i class="fas fa-weight-scale text-amber-400 mb-1 block text-lg"></i>
+                    <strong>加权轮询</strong><br><span class="text-gray-500">按性能权重分配</span>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-3 text-center text-xs">
+                    <i class="fas fa-plug text-amber-400 mb-1 block text-lg"></i>
+                    <strong>最少连接</strong><br><span class="text-gray-500">分配给最闲的机器</span>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-3 text-center text-xs">
+                    <i class="fas fa-hashtag text-amber-400 mb-1 block text-lg"></i>
+                    <strong>IP Hash</strong><br><span class="text-gray-500">同一用户固定机器</span>
+                </div>
+            </div>
+
+            <!-- Nginx 配置示例 -->
+            <h4 class="font-bold text-sm mb-2 text-gray-700"><i class="fas fa-terminal mr-1"></i>Nginx 反向代理配置示例</h4>
+            <div class="code-block p-4 text-xs">
+<span class="text-amber-400">upstream</span> <span class="text-blue-300">backend_servers</span> {
+    <span class="text-gray-500"># 加权轮询</span>
+    <span class="text-cyan-400">server</span> 192.168.1.101:8080 <span class="text-amber-400">weight</span>=3;
+    <span class="text-cyan-400">server</span> 192.168.1.102:8080 <span class="text-amber-400">weight</span>=2;
+    <span class="text-cyan-400">server</span> 192.168.1.103:8080 <span class="text-amber-400">weight</span>=1;
+    <span class="text-cyan-400">keepalive</span> 32;
+}
+
+<span class="text-amber-400">server</span> {
+    <span class="text-cyan-400">listen</span> 443 ssl;
+    <span class="text-cyan-400">server_name</span> api.example.com;
+
+    <span class="text-cyan-400">location</span> /api/ {
+        <span class="text-cyan-400">proxy_pass</span> http://backend_servers;
+        <span class="text-cyan-400">proxy_set_header</span> Host $host;
+        <span class="text-cyan-400">proxy_set_header</span> X-Real-IP $remote_addr;
+        <span class="text-cyan-400">proxy_set_header</span> X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+            </div>
+        </div>
+
+        <!-- 3.2 API 网关 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-3 step-card">
+            <h3 class="font-bold text-lg mb-4">
+                <span class="bg-amber-100 text-amber-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">3.2</span>
+                API 网关 —— 统一入口
+            </h3>
+            <p class="text-gray-600 text-sm mb-5">API 网关是整个后端服务的<strong>唯一入口</strong>，请求进入后依次经过：</p>
+
+            <!-- 网关节点的横向处理流程 -->
+            <div class="overflow-x-auto pb-3 mb-5">
+                <div class="flex items-center gap-1.5 text-xs min-w-[700px]">
+                    <div class="bg-amber-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">身份认证</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-amber-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">权限校验</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-amber-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">流量控制</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-amber-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">请求校验</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-amber-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">协议转换</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-amber-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">路由转发</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-green-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">日志埋点 ✓</div>
+                </div>
+            </div>
+
+            <h4 class="font-bold text-sm mb-3 text-gray-700">主流 API 网关对比</h4>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-50"><th>网关</th><th>特点</th><th>适用场景</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="font-mono text-amber-600 font-medium">Spring Cloud Gateway</td><td>基于 WebFlux、响应式编程</td><td>Java 微服务体系</td></tr>
+                        <tr><td class="font-mono text-amber-600 font-medium">Kong</td><td>基于 Nginx + Lua、插件丰富</td><td>通用、混合技术栈</td></tr>
+                        <tr><td class="font-mono text-amber-600 font-medium">APISIX</td><td>云原生、动态路由、高性能</td><td>容器化 / K8s 环境</td></tr>
+                        <tr><td class="font-mono text-amber-600 font-medium">Nginx + Lua</td><td>极致性能、灵活定制</td><td>高性能要求场景</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 3.3 服务发现 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-3 step-card">
+            <h3 class="font-bold text-lg mb-3">
+                <span class="bg-amber-100 text-amber-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">3.3</span>
+                服务发现与注册
+            </h3>
+            <p class="text-gray-600 text-sm mb-4">微服务架构中，服务实例是动态变化的（扩缩容、故障转移）。API 网关通过注册中心定位目标服务：</p>
+
+            <div class="bg-slate-50 rounded-xl p-5 mb-4 overflow-x-auto">
+                <div class="flex items-center gap-4 text-xs min-w-[600px]">
+                    <div class="bg-indigo-500 text-white px-4 py-3 rounded-xl text-center">
+                        <div class="font-bold text-base mb-1">注册中心</div>
+                        <div class="opacity-80">Nacos / Eureka / Consul</div>
+                    </div>
+                    <span class="text-gray-400 text-lg">⟷</span>
+                    <div class="space-y-2">
+                        <div class="bg-green-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-2">
+                            <i class="fas fa-check-circle text-xs"></i> 实例 A: 192.168.1.101:8080 <span class="opacity-70 text-xs">健康</span>
+                        </div>
+                        <div class="bg-green-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-2">
+                            <i class="fas fa-check-circle text-xs"></i> 实例 B: 192.168.1.102:8080 <span class="opacity-70 text-xs">健康</span>
+                        </div>
+                        <div class="bg-red-400 text-white px-3 py-1.5 rounded-lg flex items-center gap-2">
+                            <i class="fas fa-times-circle text-xs"></i> 实例 C: 192.168.1.103:8080 <span class="opacity-70 text-xs">已剔除</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="text-xs text-gray-400">网关查询注册中心 → 获取健康实例 → 负载均衡选择一台 → 转发请求</p>
+        </div>
+    </section>
+
+    <!-- ==================== 阶段四：后端服务 ==================== -->
+    <section class="mb-8">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white font-bold text-lg">4</div>
+            <div>
+                <h2 class="text-xl font-bold text-gray-800">阶段四：后端服务 —— 请求的终点</h2>
+                <p class="text-sm text-gray-500">请求终于到达应用服务器，进入中间件链、业务逻辑、数据访问的完整处理流程</p>
+            </div>
+        </div>
+
+        <!-- 4.1 请求到达服务器 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-4 step-card">
+            <h3 class="font-bold text-lg mb-3">
+                <span class="bg-emerald-100 text-emerald-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">4.1</span>
+                请求到达应用服务器
+            </h3>
+            <p class="text-gray-600 text-sm mb-4">以 Spring Boot（嵌入式 Tomcat）为例，HTTP 请求到达后的处理链：</p>
+            <div class="overflow-x-auto pb-3">
+                <div class="flex items-center gap-1.5 text-xs min-w-[700px]">
+                    <div class="bg-slate-600 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap"><i class="fas fa-threads mr-1"></i>线程池分配</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-cyan-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">Servlet 容器</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-teal-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">Filter 链</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-green-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">Interceptor 链</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-emerald-500 text-white px-3 py-2 rounded-lg font-medium whitespace-nowrap">DispatcherServlet</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-emerald-600 text-white px-3 py-2 rounded-lg font-bold whitespace-nowrap">Controller ✓</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4.2 中间件链 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-4 step-card">
+            <h3 class="font-bold text-lg mb-3">
+                <span class="bg-emerald-100 text-emerald-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">4.2</span>
+                中间件链（Middleware Chain）
+            </h3>
+            <p class="text-gray-600 text-sm mb-4">在请求到达 Controller 之前，一系列中间件按顺序执行：</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div class="border border-blue-200 bg-blue-50/30 rounded-lg p-3">
+                    <i class="fas fa-key text-blue-400 mb-1"></i>
+                    <h4 class="font-bold text-sm">认证拦截器</h4>
+                    <p class="text-xs text-gray-500">JWT Token 校验，提取用户信息到 ThreadLocal</p>
+                </div>
+                <div class="border border-indigo-200 bg-indigo-50/30 rounded-lg p-3">
+                    <i class="fas fa-lock text-indigo-400 mb-1"></i>
+                    <h4 class="font-bold text-sm">权限拦截器</h4>
+                    <p class="text-xs text-gray-500">检查用户是否有该接口的访问权限</p>
+                </div>
+                <div class="border border-purple-200 bg-purple-50/30 rounded-lg p-3">
+                    <i class="fas fa-check-double text-purple-400 mb-1"></i>
+                    <h4 class="font-bold text-sm">参数校验</h4>
+                    <p class="text-xs text-gray-500">@Valid 注解校验，请求参数格式验证</p>
+                </div>
+                <div class="border border-teal-200 bg-teal-50/30 rounded-lg p-3">
+                    <i class="fas fa-file-alt text-teal-400 mb-1"></i>
+                    <h4 class="font-bold text-sm">日志拦截器</h4>
+                    <p class="text-xs text-gray-500">记录请求 URL、参数、耗时</p>
+                </div>
+                <div class="border border-green-200 bg-green-50/30 rounded-lg p-3">
+                    <i class="fas fa-project-diagram text-green-400 mb-1"></i>
+                    <h4 class="font-bold text-sm">链路追踪</h4>
+                    <p class="text-xs text-gray-500">生成/传递 TraceId（SkyWalking / Jaeger）</p>
+                </div>
+                <div class="border border-red-200 bg-red-50/30 rounded-lg p-3">
+                    <i class="fas fa-bolt text-red-400 mb-1"></i>
+                    <h4 class="font-bold text-sm">熔断降级</h4>
+                    <p class="text-xs text-gray-500">Sentinel 检查资源是否过载</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4.3 业务逻辑处理 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-4 step-card">
+            <h3 class="font-bold text-lg mb-3">
+                <span class="bg-emerald-100 text-emerald-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">4.3</span>
+                业务逻辑处理 —— MVC 分层
+            </h3>
+            <p class="text-gray-600 text-sm mb-4">请求进入 Controller 后，典型的 Spring MVC 三层架构处理流程：</p>
+
+            <div class="code-block p-4 text-xs mb-4">
+<span class="text-gray-500">// Controller 层 —— 接收请求、参数绑定、返回响应</span>
+<span class="text-purple-400">@RestController</span>
+<span class="text-purple-400">@RequestMapping</span>(<span class="text-green-400">"/api/order"</span>)
+<span class="text-amber-400">public class</span> <span class="text-blue-300">OrderController</span> {
+
+    <span class="text-purple-400">@Autowired</span>
+    <span class="text-amber-400">private</span> OrderService orderService;
+
+    <span class="text-purple-400">@PostMapping</span>(<span class="text-green-400">"/create"</span>)
+    <span class="text-amber-400">public</span> Result&lt;OrderVO&gt; <span class="text-blue-300">createOrder</span>(<span class="text-purple-400">@RequestBody @Valid</span> CreateOrderRequest req) {
+        UserInfo user = UserContext.<span class="text-amber-400">getCurrentUser</span>();   <span class="text-gray-500">// ThreadLocal</span>
+        OrderVO order = orderService.<span class="text-amber-400">createOrder</span>(user, req); <span class="text-gray-500">// Service</span>
+        <span class="text-amber-400">return</span> Result.<span class="text-amber-400">success</span>(order);                 <span class="text-gray-500">// 响应</span>
+    }
+}
+
+<span class="text-gray-500">// Service 层 —— 业务逻辑编排</span>
+<span class="text-purple-400">@Service</span>
+<span class="text-amber-400">public class</span> <span class="text-blue-300">OrderService</span> {
+
+    <span class="text-purple-400">@Transactional</span>
+    <span class="text-amber-400">public</span> OrderVO <span class="text-blue-300">createOrder</span>(UserInfo user, CreateOrderRequest req) {
+        Product product = <span class="text-gray-500">// 查 Redis 缓存或调用商品服务</span>
+        inventoryService.<span class="text-amber-400">checkAndDeduct</span>(...);  <span class="text-gray-500">// 校验库存</span>
+        Order order = orderDao.<span class="text-amber-400">insert</span>(...);       <span class="text-gray-500">// 写 MySQL</span>
+        mqProducer.<span class="text-amber-400">sendOrderCreatedEvent</span>(order); <span class="text-gray-500">// 发消息异步通知</span>
+        <span class="text-amber-400">return</span> convertToVO(order);
+    }
+}
+            </div>
+
+            <div class="flex items-center gap-2 text-xs text-gray-500 mt-2">
+                <span class="text-emerald-500"><i class="fas fa-arrow-right"></i></span> Controller
+                <span class="text-gray-300">→</span> Service
+                <span class="text-gray-300">→</span> DAO
+                <span class="text-gray-300">→</span> <span class="text-emerald-600 font-medium">数据库 / 缓存</span>
+            </div>
+        </div>
+
+        <!-- 4.4 数据层交互 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4 phase-4 step-card">
+            <h3 class="font-bold text-lg mb-4">
+                <span class="bg-emerald-100 text-emerald-700 w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm mr-2">4.4</span>
+                数据库与缓存交互架构
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <!-- 读操作 -->
+                <div>
+                    <h4 class="font-bold text-sm mb-3 text-green-700"><i class="fas fa-book-open mr-1"></i>读操作路径</h4>
+                    <div class="space-y-1.5 text-xs">
+                        <div class="bg-green-50 rounded-lg p-2 flex items-center gap-2">
+                            <span class="bg-green-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">1</span>
+                            请求 → Redis 缓存
+                        </div>
+                        <div class="text-center text-gray-300 text-xs">├── 命中：直接返回</div>
+                        <div class="text-center text-gray-300 text-xs">└── 未命中 ↓</div>
+                        <div class="bg-blue-50 rounded-lg p-2 flex items-center gap-2">
+                            <span class="bg-blue-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">2</span>
+                            查询 MySQL（读从库）
+                        </div>
+                        <div class="bg-purple-50 rounded-lg p-2 flex items-center gap-2">
+                            <span class="bg-purple-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">3</span>
+                            回写 Redis 缓存 → 返回
+                        </div>
+                    </div>
+                </div>
+                <!-- 写操作 -->
+                <div>
+                    <h4 class="font-bold text-sm mb-3 text-amber-700"><i class="fas fa-pen mr-1"></i>写操作路径</h4>
+                    <div class="space-y-1.5 text-xs">
+                        <div class="bg-amber-50 rounded-lg p-2 flex items-center gap-2">
+                            <span class="bg-amber-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">1</span>
+                            写入 MySQL 主库
+                        </div>
+                        <div class="bg-orange-50 rounded-lg p-2 flex items-center gap-2">
+                            <span class="bg-orange-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">2</span>
+                            Binlog 同步 → 从库
+                        </div>
+                        <div class="bg-rose-50 rounded-lg p-2 flex items-center gap-2">
+                            <span class="bg-rose-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">3</span>
+                            Canal 监听 Binlog
+                        </div>
+                        <div class="bg-red-50 rounded-lg p-2 flex items-center gap-2">
+                            <span class="bg-red-400 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">4</span>
+                            刷新 Redis / 同步 ES / 发送 MQ 消息
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 响应返回 ==================== -->
+    <section class="mb-8">
+        <div class="bg-white rounded-2xl shadow-sm p-6 md:p-8">
+            <h2 class="text-xl font-bold mb-4">
+                <i class="fas fa-reply-all text-gray-400 mr-2"></i>响应返回：原路返回
+            </h2>
+            <div class="overflow-x-auto pb-3">
+                <div class="flex items-center gap-1.5 text-sm min-w-[700px]">
+                    <div class="bg-emerald-500 text-white px-3 py-2 rounded-lg font-medium">Controller</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-emerald-400 text-white px-3 py-2 rounded-lg font-medium">Filter</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-amber-400 text-white px-3 py-2 rounded-lg font-medium">API 网关</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-amber-300 text-white px-3 py-2 rounded-lg font-medium">负载均衡</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-purple-400 text-white px-3 py-2 rounded-lg font-medium">防火墙</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-blue-400 text-white px-3 py-2 rounded-lg font-medium">互联网</div>
+                    <span class="text-gray-300">→</span>
+                    <div class="bg-blue-500 text-white px-3 py-2 rounded-lg font-bold">浏览器 ✨</div>
+                </div>
+            </div>
+            <p class="text-xs text-gray-400 mt-3">API 网关在响应阶段可统一添加响应头、敏感数据脱敏处理。</p>
+        </div>
+    </section>
+
+    <!-- ==================== 面试高频问题 ==================== -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800"><i class="fas fa-question-circle text-indigo-500 mr-2"></i>面试高频追问</h2>
+
+        <div class="space-y-4">
+            <!-- Q1 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 step-card">
+                <h3 class="font-bold text-lg mb-2 text-indigo-700">Q1: DNS 劫持是什么？如何防范？</h3>
+                <p class="text-gray-600 text-sm mb-3">DNS 劫持指运营商或攻击者篡改 DNS 解析结果，将用户导向错误 IP。</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div class="bg-indigo-50 rounded-lg p-3 text-xs"><strong>HTTPDNS：</strong>通过 HTTP 协议直连可信 DNS 服务器</div>
+                    <div class="bg-indigo-50 rounded-lg p-3 text-xs"><strong>DNSSEC：</strong>对 DNS 响应做数字签名校验</div>
+                    <div class="bg-indigo-50 rounded-lg p-3 text-xs"><strong>DoH / DoT：</strong>加密 DNS 请求，防中间人篡改</div>
+                </div>
+            </div>
+
+            <!-- Q2 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 step-card">
+                <h3 class="font-bold text-lg mb-3 text-indigo-700">Q2: 七层负载均衡能做什么四层做不到的？</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50"><th>能力</th><th class="text-center">L4（四层）</th><th class="text-center">L7（七层）</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>按 URL 路径转发</td><td class="text-center text-red-500"><i class="fas fa-times"></i></td><td class="text-center text-green-500"><i class="fas fa-check"></i></td></tr>
+                            <tr><td>按 Cookie / Session 保持</td><td class="text-center text-red-500"><i class="fas fa-times"></i></td><td class="text-center text-green-500"><i class="fas fa-check"></i></td></tr>
+                            <tr><td>内容压缩与缓存</td><td class="text-center text-red-500"><i class="fas fa-times"></i></td><td class="text-center text-green-500"><i class="fas fa-check"></i></td></tr>
+                            <tr><td>SSL 卸载</td><td class="text-center text-red-500"><i class="fas fa-times"></i></td><td class="text-center text-green-500"><i class="fas fa-check"></i></td></tr>
+                            <tr><td>请求改写与重定向</td><td class="text-center text-red-500"><i class="fas fa-times"></i></td><td class="text-center text-green-500"><i class="fas fa-check"></i></td></tr>
+                            <tr><td>WebSocket 支持</td><td class="text-center text-red-500"><i class="fas fa-times"></i></td><td class="text-center text-green-500"><i class="fas fa-check"></i></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Q3 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 step-card">
+                <h3 class="font-bold text-lg mb-2 text-indigo-700">Q3: API 网关和服务网格（Service Mesh）有什么区别？</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                        <h4 class="font-bold text-amber-700 mb-1"><i class="fas fa-arrows-up-down mr-1"></i>API 网关</h4>
+                        <p class="text-xs text-gray-600">管理<strong>南北向流量</strong>（外部 → 内部）<br>处理鉴权、限流、协议转换</p>
+                    </div>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 class="font-bold text-blue-700 mb-1"><i class="fas fa-arrows-left-right mr-1"></i>Service Mesh</h4>
+                        <p class="text-xs text-gray-600">管理<strong>东西向流量</strong>（服务间调用）<br>处理服务发现、熔断、可观测性</p>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 mt-3">两者互补，而非替代关系。</p>
+            </div>
+
+            <!-- Q4 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 step-card">
+                <h3 class="font-bold text-lg mb-2 text-indigo-700">Q4: 一个请求从发起到响应，通常经过多少个中间环节？</h3>
+                <p class="text-gray-600 text-sm">典型微服务架构下约 <strong class="text-indigo-600">15~25 个环节</strong>。若涉及跨服务调用（如订单 → 库存 → 支付），链路更长。这也解释了为什么<strong>分布式链路追踪（APM）</strong>在生产环境中不可或缺。</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 总结 ==================== -->
+    <section class="mb-8">
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl shadow-md p-8 text-white">
+            <h2 class="text-2xl font-bold mb-4"><i class="fas fa-lightbulb mr-2"></i>总结</h2>
+            <p class="text-blue-100 mb-6">一个看似简单的 HTTP 请求，从浏览器出发到达后端服务器，经历了 15+ 个关键环节：</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div class="bg-white/15 backdrop-blur-sm rounded-lg p-3 text-center">
+                    <i class="fas fa-globe block text-xl mb-1 opacity-70"></i>
+                    <strong class="block text-sm">DNS 解析</strong>
+                    <span class="text-xs opacity-60">域名 → IP</span>
+                </div>
+                <div class="bg-white/15 backdrop-blur-sm rounded-lg p-3 text-center">
+                    <i class="fas fa-lock block text-xl mb-1 opacity-70"></i>
+                    <strong class="block text-sm">TCP + TLS</strong>
+                    <span class="text-xs opacity-60">安全通道</span>
+                </div>
+                <div class="bg-white/15 backdrop-blur-sm rounded-lg p-3 text-center">
+                    <i class="fas fa-shield-haltered block text-xl mb-1 opacity-70"></i>
+                    <strong class="block text-sm">防火墙 / WAF</strong>
+                    <span class="text-xs opacity-60">安全防线</span>
+                </div>
+                <div class="bg-white/15 backdrop-blur-sm rounded-lg p-3 text-center">
+                    <i class="fas fa-balance-scale block text-xl mb-1 opacity-70"></i>
+                    <strong class="block text-sm">负载均衡</strong>
+                    <span class="text-xs opacity-60">流量分发</span>
+                </div>
+                <div class="bg-white/15 backdrop-blur-sm rounded-lg p-3 text-center">
+                    <i class="fas fa-network-wired block text-xl mb-1 opacity-70"></i>
+                    <strong class="block text-sm">API 网关</strong>
+                    <span class="text-xs opacity-60">统��入口</span>
+                </div>
+                <div class="bg-white/15 backdrop-blur-sm rounded-lg p-3 text-center">
+                    <i class="fas fa-search block text-xl mb-1 opacity-70"></i>
+                    <strong class="block text-sm">服务发现</strong>
+                    <span class="text-xs opacity-60">定位实例</span>
+                </div>
+                <div class="bg-white/15 backdrop-blur-sm rounded-lg p-3 text-center">
+                    <i class="fas fa-cogs block text-xl mb-1 opacity-70"></i>
+                    <strong class="block text-sm">中间件链</strong>
+                    <span class="text-xs opacity-60">认证/日志/熔断</span>
+                </div>
+                <div class="bg-white/15 backdrop-blur-sm rounded-lg p-3 text-center">
+                    <i class="fas fa-code block text-xl mb-1 opacity-70"></i>
+                    <strong class="block text-sm">业务代码</strong>
+                    <span class="text-xs opacity-60">Controller → DB</span>
+                </div>
+            </div>
+            <p class="text-blue-200 text-sm mt-6 text-center">理解这条链路，是成为架构师的基本功。每个环节都可能成为性能瓶颈或故障点，排查问题时需逐段定位。</p>
+        </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="text-center text-gray-400 text-xs py-8">
+        <p>架构师学习笔记 · 请求链路全解析</p>
+    </footer>
+</div>
+
+</body>
+</html>
