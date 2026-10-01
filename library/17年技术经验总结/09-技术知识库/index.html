@@ -415,7 +415,28 @@
                         </div>
                     </div>
 
-                    <div class="nav-item">
+                                        <div class="nav-item">
+                        <a href="#" onclick="toggleMainMenu('mq')"
+                            class="flex items-center justify-between px-4 py-3 text-gray-700 hover:text-primary">
+                            <span>消息中间件</span>
+                            <i class="fas fa-chevron-down text-xs transition-transform"></i>
+                        </a>
+                        <div class="submenu ml-8" id="mq-submenu">
+                            <a href="#" onclick="loadPage('pages/05_system_architect/mq/mq-overview.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-envelope mr-2"></i>消息队列是怎么工作的
+                            </a>
+                            <a href="#" onclick="loadPage('pages/05_system_architect/mq/rabbitmq.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-random mr-2"></i>RabbitMQ 从零理解
+                            </a>
+                            <a href="#" onclick="loadPage('pages/05_system_architect/mq/kafka.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-stream mr-2"></i>Kafka 从零理解
+                            </a>
+                        </div>
+                    </div>
+<div class="nav-item">
                         <a href="#" onclick="toggleMainMenu('ai')"
                             class="flex items-center justify-between px-4 py-3 text-gray-700 hover:text-primary">
                             <div class="flex items-center">

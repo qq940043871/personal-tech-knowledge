@@ -39,4 +39,5 @@
 | `pages/00_overview/` 渲染与网络 | [03-浏览器与Web技术](../03-浏览器与Web技术/04-生产环境实际问题.md) |
 | `pages/05_system_architect/distributed/` Docker/K8s | [04-虚拟化与容器](../04-虚拟化与容器/04-生产环境实际问题.md) |
 | `pages/05_system_architect/database/` MySQL/Redis/ES/Mongo | [05-MySQL](../05-MySQL数据库/06-生产环境实际问题.md) · [06-Redis](../06-Redis中间件/04-集群与分布式.md) |
+| `pages/05_system_architect/mq/` 消息中间件 | [07-消息中间件](../07-消息中间件/05-生产环境实际问题.md)(核心概念/RabbitMQ/Kafka/可靠性) |
 | `pages/05_system_architect/high-concurrency/` 高并发 | [08-架构设计与工程实践](../08-架构设计与工程实践/04-技术选型决策记录.md) |
