@@ -241,3 +241,16 @@ MIT License
 ---
 
 **开始你的操作系统之旅吧！** 🚀
+
+---
+
+## 文档索引
+
+| 文件 | 用途 |
+|------|------|
+| [INDEX.md](./INDEX.md) | 全部文档导航索引 |
+| [SUMMARY.md](./SUMMARY.md) | 项目内容摘要 |
+| docs/ | 分章教程正文 |
+| code/ | 代码示例 |
+
+> 历史过程文件（PROGRESS.md、COMPLETION_REPORT.md、QUICK_REFERENCE.md）已归档删除。
