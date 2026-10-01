@@ -16,7 +16,7 @@ knowledge-base/
 │   ├── 00_overview/    # 规范、模板、学习路径
 │   ├── 01_hardware/ … 05_system_architect/
 │   ├── 06_ai/          # 导读 + 桩页（链接 ai-study）
-│   └── work-experience/  # 项目叙事；face-exp 已迁出
+│   └── work-experience/  # 已迁出 → personal-investment-notes/resume/pages/work-experience/
 └── assets/ css/
 ```
 

@@ -54,20 +54,20 @@
 
 | 场景 | 推荐方案 | 参考文档 |
 |------|----------|----------|
-| 高并发缓存 | Redis Cluster | [缓存系统设计](../../work-experience/电商项目问题指南/05-缓存系统设计.md) |
-| 分布式事务 | Seata AT 模式 | [数据一致性](../../work-experience/电商项目问题指南/08-数据一致性与分布式事务.md) |
-| 搜索功能 | Elasticsearch | [搜索系统设计](../../work-experience/电商项目问题指南/23-搜索系统设计.md) |
-| 容器编排 | Kubernetes | [容器化与K8S](../../work-experience/电商项目问题指南/20-容器化与K8S.md) |
-| 流量限制 | Sentinel | [高并发处理策略](../../work-experience/电商项目问题指南/04-高并发处理策略.md) |
+| 高并发缓存 | Redis Cluster | [缓存系统设计](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/05-缓存系统设计.md) |
+| 分布式事务 | Seata AT 模式 | [数据一致性](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/08-数据一致性与分布式事务.md) |
+| 搜索功能 | Elasticsearch | [搜索系统设计](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/23-搜索系统设计.md) |
+| 容器编排 | Kubernetes | [容器化与K8S](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/20-容器化与K8S.md) |
+| 流量限制 | Sentinel | [高并发处理策略](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/04-高并发处理策略.md) |
 
 ### 架构设计参考
 
 | 架构类型 | 参考文档 |
 |----------|----------|
-| 微服务架构 | [系统架构设计](../../work-experience/电商项目问题指南/01-系统架构设计.md) |
-| 高可用设计 | [高可用架构](../../work-experience/电商项目问题指南/02-高可用架构.md) |
-| 秒杀系统 | [秒杀系统设计](../../work-experience/电商项目问题指南/22-秒杀系统设计.md) |
-| 订单系统 | [订单系统设计](../../work-experience/电商项目问题指南/11-订单系统设计.md) |
+| 微服务架构 | [系统架构设计](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/01-系统架构设计.md) |
+| 高可用设计 | [高可用架构](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/02-高可用架构.md) |
+| 秒杀系统 | [秒杀系统设计](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/22-秒杀系统设计.md) |
+| 订单系统 | [订单系统设计](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/11-订单系统设计.md) |
 
 ---
 
@@ -95,7 +95,7 @@ BASE 理论：基本可用(BA) + 软状态(S) + 最终一致性(E)
 ## 相关链接
 
 - [Java 开发知识库](../04_java_developer/README.md)
-- [电商项目问题指南](../../work-experience/电商项目问题指南/README.md)（27 篇架构实战文档）
+- [电商项目问题指南](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/README.md)（27 篇架构实战文档）
 - [分布式模块](./distributed/)
 
 ---

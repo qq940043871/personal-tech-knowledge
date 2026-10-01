@@ -52,10 +52,10 @@ Java 基础语法 → 集合框架 → 异常处理 → IO/NIO
 
 | 问题 | 快速入口 |
 |------|----------|
-| 接口超时 / 响应慢 | [接口性能优化](../../work-experience/电商项目问题指南/14-接口性能优化.md) |
-| OOM / 内存溢出 | [JVM调优](../../work-experience/电商项目问题指南/16-JVM调优.md) |
-| 数据库死锁 | [数据一致性](../../work-experience/电商项目问题指南/08-数据一致性与分布式事务.md) |
-| 缓存穿透/雪崩 | [缓存系统设计](../../work-experience/电商项目问题指南/05-缓存系统设计.md) |
+| 接口超时 / 响应慢 | [接口性能优化](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/14-接口性能优化.md) |
+| OOM / 内存溢出 | [JVM调优](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/16-JVM调优.md) |
+| 数据库死锁 | [数据一致性](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/08-数据一致性与分布式事务.md) |
+| 缓存穿透/雪崩 | [缓存系统设计](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/05-缓存系统设计.md) |
 
 ### 面试高频考点
 
@@ -77,8 +77,8 @@ Java 基础语法 → 集合框架 → 异常处理 → IO/NIO
 ## 相关链接
 
 - [系统架构知识库](../05_system_architect/README.md)
-- [电商项目问题指南](../../work-experience/电商项目问题指南/README.md)（大量实战经验）
-- [面试题库](../../work-experience/face-exp/)
+- [电商项目问题指南](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/电商项目问题指南/README.md)（大量实战经验）
+- [面试题库](https://github.com/qq940043871/personal-investment-notes/tree/main/banks/face-exp)
 
 ---
 

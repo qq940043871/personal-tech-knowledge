@@ -14,9 +14,9 @@
 | 快速了解整体内容 | 👉 本页面 |
 | 排查 Java 生产问题 | [Java 排错手册](../04_java_developer/README.md) |
 | 查阅架构设计方案 | [系统架构知识库](../05_system_architect/README.md) |
-| 了解 AI 落地实践 | [大模型企业落地](../work-experience/大模型企业落地/00_大模型企业落地总览.md) |
-| 准备技术面试 | [面试题库](../work-experience/face-exp/) |
-| 查阅项目实战经验 | [项目经验库](../work-experience/README.md) |
+| 了解 AI 落地实践 | [大模型企业落地](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/大模型企业落地/00_大模型企业落地总览.md) |
+| 准备技术面试 | [面试题库](https://github.com/qq940043871/personal-investment-notes/tree/main/banks/face-exp) |
+| 查阅项目实战经验 | [项目经验库](https://github.com/qq940043871/personal-investment-notes/blob/main/resume/pages/work-experience/README.md) |
 
 ---
 
@@ -59,7 +59,7 @@
 06_ai/                AI 技术栈（大模型、RAG、向量数据库）
 ```
 
-### 💼 项目实战
+### 💼 项目实战（已迁出 → [personal-investment-notes/resume/](https://github.com/qq940043871/personal-investment-notes/tree/main/resume/pages/work-experience/)）
 
 ```
 work-experience/
