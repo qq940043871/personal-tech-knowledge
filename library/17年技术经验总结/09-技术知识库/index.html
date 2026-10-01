@@ -157,7 +157,48 @@
             <div id="sidebar-overlay" class="sidebar-overlay"></div>
             <aside id="sidebar" class="w-64 bg-white shadow-md h-screen sticky top-16 overflow-y-auto md:block hidden">
                 <nav class="py-4">
-                    <div class="nav-item">
+                                        <div class="nav-item">
+                        <a href="#" onclick="toggleMainMenu('exp-notes')"
+                            class="flex items-center justify-between px-4 py-3 text-gray-700 hover:text-primary">
+                            <span>17年实战经验笔记</span>
+                            <i class="fas fa-chevron-down text-xs transition-transform"></i>
+                        </a>
+                        <div class="submenu ml-8" id="exp-notes-submenu">
+                            <a href="#" onclick="loadPage('../00-总纲.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-book mr-2"></i>总纲与导读(17年经验总结)
+                            </a>
+                            <a href="#" onclick="loadPage('../01-计算机组成原理/04-生产环境实际问题.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-microchip mr-2"></i>计算机组成 · 生产实战
+                            </a>
+                            <a href="#" onclick="loadPage('../02-操作系统/05-生产环境实际问题.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-server mr-2"></i>操作系统 · 生产实战
+                            </a>
+                            <a href="#" onclick="loadPage('../03-浏览器与Web技术/04-生产环境实际问题.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-globe mr-2"></i>Web 技术 · 生产实战
+                            </a>
+                            <a href="#" onclick="loadPage('../04-虚拟化与容器/04-生产环境实际问题.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-cubes mr-2"></i>虚拟化与容器 · 生产实战
+                            </a>
+                            <a href="#" onclick="loadPage('../05-MySQL数据库/06-生产环境实际问题.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-database mr-2"></i>MySQL · 生产实战
+                            </a>
+                            <a href="#" onclick="loadPage('../06-Redis中间件/04-集群与分布式.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-bolt mr-2"></i>Redis · 集群与分布式
+                            </a>
+                            <a href="#" onclick="loadPage('../08-架构设计与工程实践/01-分布式系统设计.md')"
+                               class="block px-4 py-2 text-gray-600 hover:text-primary">
+                                <i class="fas fa-sitemap mr-2"></i>架构设计 · 分布式
+                            </a>
+                        </div>
+                    </div>
+<div class="nav-item">
                         <a href="#" onclick="toggleMainMenu('devops')"
                             class="flex items-center justify-between px-4 py-3 text-gray-700 hover:text-primary">
                             <div class="flex items-center">
