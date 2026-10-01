@@ -1,4 +1,4 @@
-# knowledge-base
+# 09-技术知识库
 
 架构师知识库站点（原 `hello_my_profile`）。
 
@@ -9,7 +9,7 @@
 ## 结构
 
 ```text
-knowledge-base/
+09-技术知识库/
 ├── index.html          # 侧栏导航 + iframe
 ├── md-viewer.html
 ├── pages/

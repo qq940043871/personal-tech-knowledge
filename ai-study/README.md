@@ -23,4 +23,4 @@ ai-study/
 ## 主题边界
 
 - 本工程：**AI 课程 + 大模型面试题库**唯一正文来源
-- `library/knowledge-base/pages/06_ai`：仅导读与链接桩页
+- `library/17年技术经验总结/09-技术知识库/pages/06_ai`：仅导读与链接桩页
