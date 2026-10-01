@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库文档浏览器</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/javascript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/java.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/xml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/css.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/go.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/rust.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/cpp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/dockerfile.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/nginx.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/protobuf.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #667eea;
+            --primary-dark: #5568d3;
+            --secondary-color: #764ba2;
+            --bg-color: #f5f7fa;
+            --sidebar-bg: #ffffff;
+            --text-color: #333;
+            --text-light: #666;
+            --border-color: #e0e0e0;
+            --hover-bg: #f0f2f5;
+            --active-bg: #e8f0fe;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans SC', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background: var(--bg-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            padding: 15px 20px;
+            box-shadow: var(--shadow);
+            flex-shrink: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 100%;
+        }
+
+        header h1 {
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+
+        header p {
+            font-size: 0.85em;
+            opacity: 0.9;
+        }
+
+        .menu-toggle {
+            display: none;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 8px;
+            transition: background 0.3s;
+        }
+
+        .menu-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 320px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            transition: transform 0.3s ease;
+            z-index: 50;
+        }
+
+        .sidebar-header {
+            padding: 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .search-box:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .folder-item {
+            margin-bottom: 5px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .folder-header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            padding: 10px 12px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            transition: filter 0.3s;
+        }
+
+        .folder-header:hover {
+            filter: brightness(1.1);
+        }
+
+        .folder-icon {
+            margin-right: 8px;
+        }
+
+        .folder-arrow {
+            transition: transform 0.3s;
+        }
+
+        .folder-arrow.open {
+            transform: rotate(90deg);
+        }
+
+        .folder-content {
+            background: #fafbfc;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .folder-content.open {
+            max-height: 5000px;
+        }
+
+        .subfolder-item {
+            border-top: 1px solid var(--border-color);
+        }
+
+        .subfolder-header {
+            background: #f0f2f5;
+            padding: 8px 12px 8px 24px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text-color);
+            transition: background 0.3s;
+        }
+
+        .subfolder-header:hover {
+            background: #e8eaed;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px 8px 36px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-light);
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+
+        .file-item:hover {
+            background: var(--hover-bg);
+            color: var(--text-color);
+            border-left-color: var(--primary-color);
+        }
+
+        .file-item.active {
+            background: var(--active-bg);
+            color: var(--primary-color);
+            border-left-color: var(--primary-color);
+        }
+
+        .file-icon {
+            margin-right: 8px;
+            font-size: 14px;
+        }
+
+        .file-icon.md {
+            color: #083fa1;
+        }
+
+        .file-icon.ppt {
+            color: #d24726;
+        }
+
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--sidebar-bg);
+        }
+
+        .content-header {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .content-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .breadcrumb {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+
+        .content-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .markdown-body {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .markdown-body h1 {
+            font-size: 2em;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            color: var(--text-color);
+        }
+
+        .markdown-body h2 {
+            font-size: 1.5em;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
+        }
+
+        .markdown-body h3 {
+            font-size: 1.25em;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            color: var(--text-color);
+        }
+
+        .markdown-body p {
+            margin-bottom: 15px;
+            line-height: 1.8;
+        }
+
+        .markdown-body code {
+            background: #f6f8fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+        }
+
+        .markdown-body pre {
+            background: #1e1e1e;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+
+        .markdown-body pre code {
+            background: transparent;
+            padding: 0;
+            color: #d4d4d4;
+        }
+
+        .markdown-body blockquote {
+            border-left: 4px solid var(--primary-color);
+            padding-left: 16px;
+            margin: 15px 0;
+            color: var(--text-light);
+            background: #f8f9fa;
+            padding: 10px 16px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .markdown-body ul, .markdown-body ol {
+            margin: 15px 0;
+            padding-left: 24px;
+        }
+
+        .markdown-body li {
+            margin-bottom: 8px;
+        }
+
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        .markdown-body th, .markdown-body td {
+            border: 1px solid var(--border-color);
+            padding: 10px 12px;
+            text-align: left;
+        }
+
+        .markdown-body th {
+            background: #f6f8fa;
+            font-weight: 600;
+        }
+
+        .markdown-body img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .ppt-container {
+            width: 100%;
+            height: 100%;
+            min-height: 500px;
+        }
+
+        .ppt-container iframe {
+            width: 100%;
+            height: 80vh;
+            border: none;
+            border-radius: 8px;
+        }
+
+        .ppt-preview {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .ppt-preview h2 {
+            margin-bottom: 20px;
+            color: var(--text-color);
+        }
+
+        .ppt-preview .ppt-icon-large {
+            font-size: 80px;
+            color: #d24726;
+            margin-bottom: 20px;
+        }
+
+        .ppt-preview .open-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .ppt-preview .open-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .welcome-page {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .welcome-page h2 {
+            font-size: 2em;
+            color: var(--text-color);
+            margin-bottom: 20px;
+        }
+
+        .welcome-page p {
+            color: var(--text-light);
+            font-size: 1.1em;
+            max-width: 500px;
+        }
+
+        .welcome-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 40;
+        }
+
+        .overlay.show {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .menu-toggle {
+                display: block;
+            }
+
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100%;
+                transform: translateX(-100%);
+                width: 300px;
+                max-width: 85vw;
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .content-body {
+                padding: 15px;
+            }
+
+            .markdown-body {
+                padding: 20px;
+            }
+
+            header h1 {
+                font-size: 1.2em;
+            }
+
+            .content-header {
+                padding: 10px 15px;
+            }
+
+            .content-title {
+                font-size: 1em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .sidebar {
+                width: 280px;
+            }
+
+            .markdown-body {
+                padding: 15px;
+            }
+
+            .markdown-body h1 {
+                font-size: 1.5em;
+            }
+
+            .markdown-body h2 {
+                font-size: 1.25em;
+            }
+
+            .markdown-body h3 {
+                font-size: 1.1em;
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div>
+                <h1>知识库文档浏览器</h1>
+                <p>支持 Markdown 和 PPT 文件在线预览</p>
+            </div>
+            <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="overlay" onclick="toggleSidebar()"></div>
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <input type="text" class="search-box" placeholder="搜索文件..." oninput="filterFiles(this.value)">
+            </div>
+            <div class="file-list" id="fileList"></div>
+        </aside>
+        <main class="content-area">
+            <div class="content-header">
+                <div class="content-title" id="contentTitle">欢迎</div>
+                <div class="breadcrumb" id="breadcrumb"></div>
+            </div>
+            <div class="content-body" id="contentBody">
+                <div class="welcome-page">
+                    <div class="welcome-icon">📚</div>
+                    <h2>欢迎使用知识库文档浏览器</h2>
+                    <p>从左侧菜单选择文件开始阅读，支持 Markdown 和 PPT 文件在线预览</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const fileStructure = {
+            "17年技术经验总结": {
+                "01-计算机组成原理": [
+                    "01-CPU架构与指令集.md",
+                    "02-内存管理与缓存机制.md",
+                    "03-存储层次与IO原理.md",
+                    "04-生产环境实际问题.md"
+                ],
+                "02-操作系统": [
+                    "01-进程与线程管理.md",
+                    "02-内存管理与虚拟内存.md",
+                    "03-文件系统与IO模型.md",
+                    "04-Linux内核调优.md",
+                    "05-生产环境实际问题.md"
+                ],
+                "03-浏览器与Web技术": [
+                    "01-浏览器渲染原理.md",
+                    "02-网络协议与HTTP.md",
+                    "03-前端性能优化.md",
+                    "04-生产环境实际问题.md"
+                ],
+                "04-虚拟化与容器": [
+                    "01-虚拟机技术原理.md",
+                    "02-Docker容器化.md",
+                    "03-Kubernetes编排.md",
+                    "04-生产环境实际问题.md"
+                ],
+                "05-MySQL数据库": [
+                    "01-架构与存储引擎.md",
+                    "02-索引原理与优化.md",
+                    "03-事务与锁机制.md",
+                    "04-主从复制与高可用.md",
+                    "05-性能调优实战.md",
+                    "06-生产环境实际问题.md"
+                ],
+                "06-Redis中间件": [
+                    "01-数据结构与底层原理.md",
+                    "02-持久化与高可用.md",
+                    "03-缓存策略与问题.md",
+                    "04-集群与分布式.md"
+                ],
+                "07-消息中间件": [
+                    "01-消息队列核心概念.md",
+                    "02-RabbitMQ实战.md",
+                    "03-Kafka实战.md",
+                    "04-消息可靠性与顺序性.md",
+                    "05-生产环境实际问题.md"
+                ],
+                "08-架构设计与工程实践": [
+                    "01-分布式系统设计.md",
+                    "02-高并发系统设计.md",
+                    "03-故障排查方法论.md",
+                    "04-技术选型决策记录.md"
+                ],
+                "_files": ["00-总纲.md"]
+            },
+            "AI常用类库指南": {
+                "00-总览": [
+                    "00-AI类库总纲.md"
+                ],
+                "01-图像分类": ["01-图像分类类库.md"],
+                "02-目标检测": ["01-目标检测类库.md"],
+                "03-自然语言处理": ["01-NLP类库.md"],
+                "04-语音识别": ["01-语音识别类库.md"],
+                "05-语义理解": ["01-语义理解类库.md"],
+                "06-图像生成": ["01-图像生成类库.md"],
+                "07-视频生成": ["01-视频生成类库.md"],
+                "08-语音合成": ["01-语音合成类库.md"]
+            },
+            "FFmpeg学习指南": {
+                "00-总览": ["00-FFmpeg总纲.md"],
+                "01-安装与基础": ["01-FFmpeg安装与核心概念.md"],
+                "02-常用命令": [
+                    "01-视频转码与格式转换.md",
+                    "02-音频处理命令.md"
+                ],
+                "03-流媒体处理": ["01-RTSP拉流与RTMP推流.md"]
+            },
+            "Java框架全景图": {
+                "01-Spring框架": [
+                    "01-SpringFramework详解.md",
+                    "02-SpringBoot快速开发.md"
+                ],
+                "03-数据访问": [
+                    "01-MyBatis数据持久层.md",
+                    "02-SpringDataJPA详解.md"
+                ],
+                "04-数据库连接池": ["01-Druid连接池详解.md"],
+                "05-微服务框架": ["01-SpringCloud微服务架构.md"],
+                "06-消息中间件": [
+                    "01-Redis分布式缓存.md",
+                    "02-RabbitMQ消息队列.md",
+                    "03-Kafka消息系统.md"
+                ],
+                "08-搜索引擎": ["01-Elasticsearch全文搜索.md"],
+                "12-工具类库": [
+                    "01-SpringSecurity安全框架.md",
+                    "02-Lombok简化代码.md",
+                    "03-MySQL数据库.md"
+                ],
+                "14-其他框架": ["01-Docker容器化部署.md"],
+                "_files": ["00-框架总纲.md"]
+            },
+            "Java避坑指南": {
+                "01-基础篇": ["01-Java基础避坑指南.md"],
+                "02-集合与并发篇": ["01-集合与并发避坑指南.md"],
+                "03-Spring开发篇": ["01-Spring开发避坑指南.md"],
+                "04-数据库开发篇": ["01-数据库开发避坑指南.md"],
+                "05-微服务篇": ["01-微服务开发避坑指南.md"],
+                "06-开发规范篇": ["01-开发规范指南.md"],
+                "_files": ["00-Java高级工程师避坑与规范.md"]
+            },
+            "Kafka学习指南": {
+                "00-总览": ["00-Kafka总纲.md"],
+                "01-基础入门": ["01-Kafka安装与快速入门.md"],
+                "02-核心概念": [
+                    "01-Topic与Partition.md",
+                    "02-消息偏移量与消费组.md"
+                ],
+                "03-生产者消费者": [
+                    "01-生产者配置与优化.md",
+                    "02-消费者配置与Rebalance.md"
+                ],
+                "04-存储机制": ["01-Kafka存储架构与日志.md"],
+                "05-运维与集群": ["01-Kafka集群配置与运维.md"]
+            },
+            "Linux学习指南": {
+                "00-总览": ["00-Linux总纲.md"],
+                "01-基础命令": [
+                    "01-文件与目录操作.md",
+                    "02-用户与权限管理.md"
+                ],
+                "02-进程管理": [
+                    "01-进程原理与生命周期.md",
+                    "02-进程查看与控制.md"
+                ],
+                "03-内存管理": [
+                    "01-内存管理原理.md",
+                    "02-内存查看与分析.md"
+                ],
+                "04-CPU调度": ["01-CPU调度原理.md"],
+                "05-网络管理": [
+                    "01-网络管理基础.md",
+                    "02-网络抓包分析.md"
+                ],
+                "07-性能排查": [
+                    "01-CPU飙升排查手册.md",
+                    "02-内存不足排查手册.md",
+                    "03-进程消失排查手册.md"
+                ],
+                "09-实战案例": [
+                    "01-Java应用CPU飙升案例.md",
+                    "02-内存溢出OOM案例.md",
+                    "03-系统负载高排查案例.md"
+                ]
+            },
+            "MiniIO学习指南": {
+                "00-总览": ["00-MiniIO总纲.md"],
+                "01-快速入门": ["01-MiniIO安装与配置.md"],
+                "02-Java客户端": [
+                    "01-MiniIO Java SDK使用.md",
+                    "02-文件上传下载示例.md"
+                ],
+                "03-运维配置": ["01-MiniIO集群与运维.md"]
+            },
+            "Nginx学习指南": {
+                "00-总览": ["00-Nginx总纲.md"],
+                "01-基础配置": [
+                    "01-Nginx安装与基本命令.md",
+                    "02-Nginx核心配置结构.md",
+                    "03-Nginx常用指令详解.md"
+                ],
+                "02-反向代理": ["01-Nginx反向代理配置.md"],
+                "03-负载均衡": ["01-Nginx负载均衡配置.md"],
+                "04-安全配置": ["01-NginxHTTPS与安全配置.md"],
+                "05-跨域与缓存": ["01-Nginx跨域配置CORS.md"],
+                "06-高可用与优化": ["01-Nginx性能优化与高可用.md"],
+                "07-实战配置": ["01-Nginx实战配置模板.md"]
+            },
+            "Cluadecode学习指南": {
+                "00-总览": ["README.md"],
+                "01-概述": [
+                    "什么是Claude-Code.md",
+                    "核心特性与价值.md",
+                    "与竞品对比.md"
+                ],
+                "02-安装与配置": [
+                    "环境要求.md",
+                    "安装步骤.md",
+                    "模型配置.md"
+                ],
+                "03-使用指南": [
+                    "基础交互.md",
+                    "Slash命令.md",
+                    "Skills技能系统.md",
+                    "多Agent协作.md",
+                    "IDE集成.md"
+                ],
+                "04-技术实现原理": [
+                    "整体架构设计.md",
+                    "QueryEngine核心引擎.md",
+                    "工具系统.md",
+                    "权限模型.md",
+                    "MCP协议集成.md"
+                ],
+                "05-应用场景": [
+                    "代码开发.md",
+                    "项目重构.md",
+                    "自动化工作流.md",
+                    "CI-CD集成.md"
+                ],
+                "06-高级特性": [
+                    "Hooks钩子系统.md",
+                    "自定义Skills.md",
+                    "Agent-SDK.md",
+                    "远程会话.md"
+                ],
+                "07-最佳实践": [
+                    "安全最佳实践.md",
+                    "性能优化.md",
+                    "故障排查.md"
+                ]
+            },
+            "OS_Tutorial": [
+                "00_Prerequisites.md",
+                "01_Bootloader.md",
+                "02_ProtectedMode.md",
+                "03_Kernel_Entry.md",
+                "04_Memory.md",
+                "05_Interrupts.md",
+                "06_Process.md",
+                "07_FileSystem.md",
+                "08_Drivers.md",
+                "09_Shell.md",
+                "10_Syscall.md",
+                "11_UserPrograms.md",
+                "A_References.md",
+                "README.md"
+            ],
+            "Openclaw学习指南": {
+                "00-总览": ["README.md"],
+                "01-概述": [
+                    "什么是Openclaw.md",
+                    "核心特性与价值.md",
+                    "发展历程.md"
+                ],
+                "02-安装与配置": [
+                    "环境要求.md",
+                    "安装步骤.md",
+                    "配置指南.md"
+                ],
+                "03-使用指南": [
+                    "基础交互.md",
+                    "命令系统.md",
+                    "Skills技能系统.md",
+                    "多渠道通信.md"
+                ],
+                "04-技术实现原理": [
+                    "整体架构设计.md",
+                    "核心模块解析.md",
+                    "插件系统.md",
+                    "记忆系统.md",
+                    "权限与安全.md"
+                ],
+                "05-应用场景": [
+                    "个人助理场景.md",
+                    "开发者场景.md",
+                    "自动化场景.md",
+                    "企业应用.md"
+                ],
+                "06-高级特性": [
+                    "自定义Skills开发.md",
+                    "多模型配置.md",
+                    "性能优化.md"
+                ],
+                "07-最佳实践": [
+                    "安全建议.md",
+                    "性能调优.md",
+                    "故障排查.md"
+                ]
+            },
+            "OpenCV学习指南": {
+                "00-总览": ["00-OpenCV总纲.md"],
+                "01-Python开发": ["01-Python+OpenCV安装与摄像头捕获.md"],
+                "02-核心功能": [
+                    "01-图像处理基础.md",
+                    "02-特征检测与匹配.md"
+                ],
+                "03-摄像头与视频": [
+                    "01-摄像头捕获与显示.md",
+                    "02-视频录制与处理.md"
+                ]
+            },
+            "Zookeeper学习指南": {
+                "00-总览": ["00-Zookeeper总纲.md"],
+                "01-基础概念": ["01-Zookeeper安装与数据结构.md"],
+                "02-分布式协调": [
+                    "01-ZAB协议与Leader选举.md",
+                    "02-Watch机制与节点类型.md"
+                ],
+                "03-应用场景": [
+                    "01-分布式锁实现.md",
+                    "02-Kafka_Hadoop集成.md"
+                ]
+            },
+            "Redis学习指南": {
+                "00-总览": ["00-Redis学习指南总纲.md"],
+                "02-数据类型": [
+                    "01-基础数据类型.md",
+                    "02-高级数据类型.md"
+                ],
+                "03-高级特性": [
+                    "01-持久化机制.md",
+                    "02-事务与Lua脚本.md"
+                ],
+                "04-集群与高可用": ["01-主从复制与Sentinel.md"],
+                "05-应用场景": ["01-缓存与分布式锁.md"]
+            },
+            "农村65后父亲的蹉跎岁月": [
+                "农村65后父亲的蹉跎岁月.md",
+                "母亲的灶台-短视频脚本.md",
+                "母亲的灶台-视频分镜脚本.md",
+                "父亲的手-短视频脚本.md",
+                "父亲的手-视频分镜脚本.md"
+            ],
+            "大模型工具全景图": {
+                "00-总览": [
+                    "00-工具总纲.md",
+                    "AI学习大纲.md",
+                    "AI学习详细教程.md"
+                ],
+                "01-应用开发框架": [
+                    "01-LangChain详解.md",
+                    "02-LlamaIndex详解.md"
+                ],
+                "02-向量数据库": [
+                    "01-Chroma向量数据库.md",
+                    "02-Milvus向量数据库.md"
+                ],
+                "03-Embedding模型": ["01-OpenAI-Embeddings.md"],
+                "04-微调工具": ["01-LLaMA-Factory微调工具.md"],
+                "05-部署推理": ["01-Ollama本地推理.md"],
+                "06-数据处理": ["01-Label-Studio标注平台.md"],
+                "07-提示词工程": ["01-Prompt-Engineering提示词工程.md"],
+                "09-应用案例": ["01-RAG系统实战.md"]
+            },
+            "实际工作项目": {
+                "摄像头视频方案": {
+                    "00-总览": ["00-摄像头视频方案总纲.md"],
+                    "01-FFmpeg拉流": ["01-摄像头拉流配置.md"],
+                    "02-推流配置": ["01-ZLM推流与分发.md"],
+                    "03-回放实现": ["01-视频录制与回放.md"],
+                    "04-ZLM集成": ["01-ZLM完整集成方案.md"]
+                },
+                "智能体管理系统设计": [
+                    "01-需求规格说明书.md",
+                    "02-数据库设计文档.md"
+                ]
+            },
+            "少儿编程30天课程": [
+                "少儿编程30天_Day01-05.pptx",
+                "少儿编程30天_Day06-10.pptx",
+                "少儿编程30天_Day11-15.pptx",
+                "少儿编程30天_Day16-20.pptx",
+                "少儿编程30天_Day21-30.pptx"
+            ],
+            "手写JVM": {
+                "00-总纲与架构": ["00-总纲与架构设计.md"],
+                "01-字节码基础": [
+                    "01-ClassFile结构详解.md",
+                    "02-字节码指令集.md"
+                ],
+                "02-类加载器": ["01-双亲委派模型.md"],
+                "03-运行时数据区": ["01-运行时数据区详解.md"],
+                "04-执行引擎": ["01-执行引擎详解.md"],
+                "05-垃圾回收器": ["01-垃圾回收器详解.md"]
+            },
+            "手写Web容器": {
+                "01-网络基础": [
+                    "01-TCP协议与Socket编程.md",
+                    "02-HTTP协议详解.md",
+                    "03-NIO与多路复用.md",
+                    "04-线程模型设计.md"
+                ],
+                "02-HTTP解析引擎": [
+                    "01-请求报文解析.md",
+                    "02-响应报文构建.md",
+                    "03-HTTP请求对象封装.md",
+                    "04-HTTP响应对象封装.md"
+                ],
+                "03-连接器（Connector）": [
+                    "01-Connector架构设计.md",
+                    "02-BIO连接器实现.md",
+                    "03-NIO连接器实现.md",
+                    "04-连接池管理.md"
+                ],
+                "04-容器（Container）": [
+                    "01-Container层次结构.md",
+                    "02-Engine引擎实现.md",
+                    "03-Host虚拟主机.md",
+                    "04-Context应用上下文.md",
+                    "05-Wrapper Servlet包装器.md"
+                ],
+                "05-Servlet规范实现": [
+                    "01-Servlet接口与生命周期.md",
+                    "02-ServletContext实现.md",
+                    "03-HttpSession实现.md",
+                    "04-Cookie处理.md",
+                    "05-Filter过滤器链.md"
+                ],
+                "06-请求处理管道": [
+                    "01-Pipeline-Valve管道阀门.md",
+                    "02-请求分发机制.md",
+                    "03-错误处理机制.md"
+                ],
+                "07-类加载器": [
+                    "01-Java类加载机制.md",
+                    "02-WebApp类加载器.md",
+                    "03-类隔离与热部署.md"
+                ],
+                "08-配置与启动": [
+                    "01-server.xml解析.md",
+                    "02-web.xml解析.md",
+                    "03-启动流程设计.md",
+                    "04-优雅停机.md"
+                ],
+                "09-性能优化": [
+                    "01-线程池调优.md",
+                    "02-静态资源缓存.md",
+                    "03-Gzip压缩.md",
+                    "04-Keep-Alive长连接.md"
+                ],
+                "10-扩展功能": [
+                    "01-HTTPS支持.md",
+                    "02-WebSocket支持.md",
+                    "03-虚拟主机配置.md",
+                    "04-日志系统.md"
+                ],
+                "_files": ["00-总纲与架构设计.md"]
+            },
+            "手写大模型": {
+                "01-核心架构": [
+                    "01-系统架构.md",
+                    "02-模型加载.md",
+                    "03-推理引擎.md",
+                    "04-对话管理.md"
+                ],
+                "02-模型推理": [
+                    "01-推理流程.md",
+                    "02-批量推理.md",
+                    "03-流式输出.md",
+                    "04-模型量化.md"
+                ],
+                "03-Tokenizer分词器": [
+                    "01-BPE分词.md",
+                    "02-词表管理.md"
+                ],
+                "04-Attention机制": [
+                    "01-Self-Attention.md",
+                    "02-Multi-Head-Attention.md",
+                    "03-KV-Cache.md",
+                    "04-Flash-Attention.md"
+                ],
+                "05-Skill系统": ["01-Skill架构.md"],
+                "_files": ["00-总纲与架构设计.md"]
+            }
+        };
+
+        let currentFile = null;
+
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            if (ext === 'md') return '<span class="file-icon md">📝</span>';
+            if (['ppt', 'pptx'].includes(ext)) return '<span class="file-icon ppt">📊</span>';
+            return '<span class="file-icon">📄</span>';
+        }
+
+        function renderFileList() {
+            const container = document.getElementById('fileList');
+            let html = '';
+
+            for (const [folderName, content] of Object.entries(fileStructure)) {
+                html += `<div class="folder-item">
+                    <div class="folder-header" onclick="toggleFolder(this)">
+                        <span><span class="folder-icon">📁</span>${folderName}</span>
+                        <span class="folder-arrow">▶</span>
+                    </div>
+                    <div class="folder-content">`;
+
+                if (Array.isArray(content)) {
+                    content.forEach(file => {
+                        const path = `${folderName}/${file}`;
+                        html += `<div class="file-item" onclick="loadFile('${path}', '${file}')" data-name="${file.toLowerCase()}">
+                            ${getFileIcon(file)}${file}
+                        </div>`;
+                    });
+                } else {
+                    if (content._files) {
+                        content._files.forEach(file => {
+                            const path = `${folderName}/${file}`;
+                            html += `<div class="file-item" onclick="loadFile('${path}', '${file}')" data-name="${file.toLowerCase()}">
+                                ${getFileIcon(file)}${file}
+                            </div>`;
+                        });
+                    }
+                    for (const [subFolderName, files] of Object.entries(content)) {
+                        if (subFolderName === '_files') continue;
+                        
+                        if (Array.isArray(files)) {
+                            html += `<div class="subfolder-item">
+                                <div class="subfolder-header" onclick="toggleSubfolder(this)">
+                                    <span><span class="folder-icon">📂</span>${subFolderName}</span>
+                                    <span class="folder-arrow">▶</span>
+                                </div>
+                                <div class="folder-content">`;
+                            files.forEach(file => {
+                                const path = `${folderName}/${subFolderName}/${file}`;
+                                html += `<div class="file-item" onclick="loadFile('${path}', '${file}')" data-name="${file.toLowerCase()}">
+                                    ${getFileIcon(file)}${file}
+                                </div>`;
+                            });
+                            html += `</div></div>`;
+                        } else {
+                            html += `<div class="subfolder-item">
+                                <div class="subfolder-header" onclick="toggleSubfolder(this)">
+                                    <span><span class="folder-icon">📂</span>${subFolderName}</span>
+                                    <span class="folder-arrow">▶</span>
+                                </div>
+                                <div class="folder-content">`;
+                            
+                            if (files._files) {
+                                files._files.forEach(file => {
+                                    const path = `${folderName}/${subFolderName}/${file}`;
+                                    html += `<div class="file-item" onclick="loadFile('${path}', '${file}')" data-name="${file.toLowerCase()}">
+                                        ${getFileIcon(file)}${file}
+                                    </div>`;
+                                });
+                            }
+                            
+                            for (const [subSubFolderName, subFiles] of Object.entries(files)) {
+                                if (subSubFolderName === '_files') continue;
+                                html += `<div class="subfolder-item">
+                                    <div class="subfolder-header" onclick="toggleSubfolder(this)">
+                                        <span><span class="folder-icon">📂</span>${subSubFolderName}</span>
+                                        <span class="folder-arrow">▶</span>
+                                    </div>
+                                    <div class="folder-content">`;
+                                subFiles.forEach(file => {
+                                    const path = `${folderName}/${subFolderName}/${subSubFolderName}/${file}`;
+                                    html += `<div class="file-item" onclick="loadFile('${path}', '${file}')" data-name="${file.toLowerCase()}">
+                                        ${getFileIcon(file)}${file}
+                                    </div>`;
+                                });
+                                html += `</div></div>`;
+                            }
+                            html += `</div></div>`;
+                        }
+                    }
+                }
+                html += '</div></div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        function toggleFolder(element) {
+            const content = element.nextElementSibling;
+            const arrow = element.querySelector('.folder-arrow');
+            content.classList.toggle('open');
+            arrow.classList.toggle('open');
+        }
+
+        function toggleSubfolder(element) {
+            const content = element.nextElementSibling;
+            const arrow = element.querySelector('.folder-arrow');
+            content.classList.toggle('open');
+            arrow.classList.toggle('open');
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.querySelector('.overlay');
+            sidebar.classList.toggle('show');
+            overlay.classList.toggle('show');
+        }
+
+        function filterFiles(query) {
+            const files = document.querySelectorAll('.file-item');
+            const folders = document.querySelectorAll('.folder-item');
+            
+            query = query.toLowerCase().trim();
+            
+            if (!query) {
+                files.forEach(f => f.style.display = 'flex');
+                return;
+            }
+
+            files.forEach(file => {
+                const name = file.getAttribute('data-name') || '';
+                file.style.display = name.includes(query) ? 'flex' : 'none';
+            });
+
+            folders.forEach(folder => {
+                const visibleFiles = folder.querySelectorAll('.file-item[style*="flex"]');
+                if (visibleFiles.length > 0) {
+                    folder.style.display = 'block';
+                    const folderContent = folder.querySelector('.folder-content');
+                    if (folderContent) folderContent.classList.add('open');
+                } else {
+                    folder.style.display = 'none';
+                }
+            });
+        }
+
+        async function loadFile(path, filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const contentBody = document.getElementById('contentBody');
+            const contentTitle = document.getElementById('contentTitle');
+            const breadcrumb = document.getElementById('breadcrumb');
+
+            document.querySelectorAll('.file-item').forEach(f => f.classList.remove('active'));
+            event.target.closest('.file-item')?.classList.add('active');
+
+            contentTitle.textContent = filename;
+            breadcrumb.textContent = path;
+
+            if (window.innerWidth <= 768) {
+                toggleSidebar();
+            }
+
+            if (ext === 'md') {
+                try {
+                    const response = await fetch(path);
+                    if (!response.ok) throw new Error('文件加载失败');
+                    const text = await response.text();
+                    const html = marked.parse(text);
+                    contentBody.innerHTML = `<div class="markdown-body">${html}</div>`;
+                    if (typeof hljs !== 'undefined') {
+                        document.querySelectorAll('.markdown-body pre code').forEach(block => {
+                            hljs.highlightElement(block);
+                        });
+                    }
+                } catch (error) {
+                    contentBody.innerHTML = `<div class="markdown-body">
+                        <h2>文件加载失败</h2>
+                        <p>无法加载文件: ${path}</p>
+                        <p>错误信息: ${error.message}</p>
+                        <p>请确保文件存在且可以通过HTTP服务器访问。</p>
+                    </div>`;
+                }
+            } else if (['ppt', 'pptx'].includes(ext)) {
+                const encodedPath = encodeURIComponent(path);
+                contentBody.innerHTML = `<div class="ppt-preview">
+                    <div class="ppt-icon-large">📊</div>
+                    <h2>${filename}</h2>
+                    <p style="margin-bottom: 20px; color: #666;">PPT文件预览</p>
+                    <a href="${path}" class="open-btn" target="_blank">下载查看</a>
+                </div>`;
+            } else {
+                contentBody.innerHTML = `<div class="markdown-body">
+                    <h2>不支持的文件类型</h2>
+                    <p>暂不支持预览此类型文件: ${ext}</p>
+                </div>`;
+            }
+        }
+
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+
+        renderFileList();
+    </script>
+</body>
+</html>

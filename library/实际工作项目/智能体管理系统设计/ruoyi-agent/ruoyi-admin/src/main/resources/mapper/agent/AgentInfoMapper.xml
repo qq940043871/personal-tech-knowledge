@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.agent.mapper.AgentInfoMapper">
+
+    <resultMap type="com.ruoyi.agent.domain.AgentInfo" id="AgentInfoResult">
+        <id property="agentId" column="agent_id"/>
+        <result property="agentName" column="agent_name"/>
+        <result property="agentType" column="agent_type"/>
+        <result property="description" column="description"/>
+        <result property="avatarUrl" column="avatar_url"/>
+        <result property="modelName" column="model_name"/>
+        <result property="systemPrompt" column="system_prompt"/>
+        <result property="temperature" column="temperature"/>
+        <result property="maxTokens" column="max_tokens"/>
+        <result property="status" column="status"/>
+        <result property="isPublic" column="is_public"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectAgentInfoVo">
+        select agent_id, agent_name, agent_type, description, avatar_url, model_name,
+               system_prompt, temperature, max_tokens, status, is_public,
+               create_by, create_time, update_by, update_time, remark
+        from agent_info
+    </sql>
+
+    <select id="selectAgentInfoList" parameterType="com.ruoyi.agent.domain.AgentInfo" resultMap="AgentInfoResult">
+        <include refid="selectAgentInfoVo"/>
+        <where>
+            <if test="agentName != null and agentName != ''">
+                AND agent_name like concat('%', #{agentName}, '%')
+            </if>
+            <if test="agentType != null and agentType != ''">
+                AND agent_type = #{agentType}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            <if test="isPublic != null and isPublic != ''">
+                AND is_public = #{isPublic}
+            </if>
+            AND del_flag = '0'
+        </where>
+        order by create_time desc
+    </select>
+
+    <select id="selectAgentInfoById" parameterType="Long" resultMap="AgentInfoResult">
+        <include refid="selectAgentInfoVo"/>
+        where agent_id = #{agentId} and del_flag = '0'
+    </select>
+
+    <insert id="insertAgentInfo" parameterType="com.ruoyi.agent.domain.AgentInfo" useGeneratedKeys="true" keyProperty="agentId">
+        insert into agent_info (
+            agent_name, agent_type, description, avatar_url, model_name,
+            system_prompt, temperature, max_tokens, status, is_public,
+            create_by, create_time, remark, del_flag
+        ) values (
+            #{agentName}, #{agentType}, #{description}, #{avatarUrl}, #{modelName},
+            #{systemPrompt}, #{temperature}, #{maxTokens}, #{status}, #{isPublic},
+            #{createBy}, sysdate(), #{remark}, '0'
+        )
+    </insert>
+
+    <update id="updateAgentInfo" parameterType="com.ruoyi.agent.domain.AgentInfo">
+        update agent_info
+        <set>
+            <if test="agentName != null">agent_name = #{agentName},</if>
+            <if test="agentType != null">agent_type = #{agentType},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="avatarUrl != null">avatar_url = #{avatarUrl},</if>
+            <if test="modelName != null">model_name = #{modelName},</if>
+            <if test="systemPrompt != null">system_prompt = #{systemPrompt},</if>
+            <if test="temperature != null">temperature = #{temperature},</if>
+            <if test="maxTokens != null">max_tokens = #{maxTokens},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="isPublic != null">is_public = #{isPublic},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_by = #{updateBy},
+            update_time = sysdate()
+        </set>
+        where agent_id = #{agentId}
+    </update>
+
+    <update id="deleteAgentInfoByIds">
+        update agent_info set del_flag = '1' where agent_id in
+        <foreach collection="array" item="agentId" open="(" separator="," close=")">
+            #{agentId}
+        </foreach>
+    </update>
+
+    <update id="deleteAgentInfoById" parameterType="Long">
+        update agent_info set del_flag = '1' where agent_id = #{agentId}
+    </update>
+
+</mapper>
