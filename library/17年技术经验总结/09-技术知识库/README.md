@@ -15,14 +15,14 @@
 ├── pages/
 │   ├── 00_overview/    # 规范、模板、学习路径
 │   ├── 01_hardware/ … 05_system_architect/
-│   ├── 06_ai/          # 导读 + 桩页（链接 ai-study）
+│   ├── 06_ai/          # 导读 + 桩页（链接 blog）
 │   └── work-experience/  # 已迁出 → personal-investment-notes/resume/pages/work-experience/
 └── assets/ css/
 ```
 
 ## 边界
 
-- AI 课程与大模型刷题 → `ai-study/`  
+- AI 技术笔记与博文 → `blog/`（博客「码潮 CodeTide」）  
 - 面试真题与八股 → `interview-kit/banks/`（含 face-exp）  
 - 本库 `06_ai` 只保留导读与链接桩页
 
