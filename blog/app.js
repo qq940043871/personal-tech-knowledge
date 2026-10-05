@@ -18,8 +18,162 @@ const cloud = WorkBuddyCloud.createWorkBuddyCloud({
 let session = null;          // 当前登录会话（null = 游客）
 let authUnsub = null;
 const PAGE_SIZE = 9;
+let __localMode = false;      // 离线模式：用 _seed/ 下的种子数据
+let __localMeta = null;       // 本地文章元信息数组
+let __localContents = {};     // id -> 完整正文（懒加载）
+let __localReady = null;      // Promise，本地数据加载完成后 resolve
 
-/* ---------- 3. 小工具 ---------- */
+/* ---------- 3. 本地数据层（离线模式 / 种子数据预览） ---------- */
+// 当 URL 带 ?local=1 或云端不可达时，从 _seed/meta.json + _seed/blocks.jsonl 加载文章。
+// 所有读操作统一走 postStore 抽象，云端优先，本地兜底。
+function ensureLocalReady() {
+  if (__localReady) return __localReady;
+  __localReady = (async () => {
+    const [metaRes, blocksRes] = await Promise.all([
+      fetch("_seed/meta.json", { cache: "no-store" }),
+      fetch("_seed/blocks.jsonl", { cache: "no-store" }),
+    ]);
+    if (!metaRes.ok) throw new Error("meta.json 加载失败");
+    __localMeta = await metaRes.json();
+    // 逐行解析 blocks.jsonl，按 post 收集每块的 b64
+    const chunkB64 = {}; // post -> [b64_chunk, ...]
+    const text = await blocksRes.text();
+    text.split("\n").forEach((line) => {
+      if (!line.trim()) return;
+      try {
+        const b = JSON.parse(line);
+        if (!chunkB64[b.post]) chunkB64[b.post] = [];
+        chunkB64[b.post][b.seq - 1] = b.b64;
+      } catch (e) { /* 忽略坏行 */ }
+    });
+    // 每块独立解码，拼接字节（每块是独立合法的 base64，不能直接拼 b64 字符串）
+    __localMeta.forEach((m) => {
+      const arr = chunkB64[m.idx] || [];
+      try {
+        const parts = [];
+        for (const b64 of arr) {
+          if (!b64) continue;
+          const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+          parts.push(bytes);
+        }
+        // 拼接所有块的字节
+        let totalLen = 0;
+        parts.forEach((p) => { totalLen += p.length; });
+        const all = new Uint8Array(totalLen);
+        let offset = 0;
+        parts.forEach((p) => { all.set(p, offset); offset += p.length; });
+        __localContents[m.idx] = new TextDecoder().decode(all);
+      } catch (e) { __localContents[m.idx] = "（正文解码失败）"; }
+    });
+    // 生成一些稳定的 created_at 与 views，让 UI 看起来正常
+    const now = Date.now();
+    __localMeta.forEach((m, i) => {
+      m.id = m.idx;
+      m.cover_emoji = m.emoji || "📝";
+      m.cover_hue = m.hue || 210;
+      m.status = "published";
+      m.views = 100 + Math.floor(Math.random() * 1900);
+      m.created_at = new Date(now - i * 86400000 * 2 - Math.random() * 86400000).toISOString();
+      m.owner_id = "local";
+      m.content = __localContents[m.idx];
+    });
+  })();
+  return __localReady;
+}
+
+// 本地查询：模拟 cloud.database 的 select/eq/contains/order/range 调用（只支持博客实际用到的子集）
+function localPosts() {
+  let rows = (__localMeta || []).slice();
+  let picked = null; // select 的字段列表
+  let needCount = false;
+  return {
+    eq(field, val) {
+      if (field === "status") rows = rows.filter((r) => r.status === val);
+      if (field === "id") rows = rows.filter((r) => r.id === val);
+      if (field === "owner_id") rows = rows.filter((r) => r.owner_id === val);
+      return this;
+    },
+    gt(field, val) {
+      rows = rows.filter((r) => r[field] > val);
+      return this;
+    },
+    lt(field, val) {
+      rows = rows.filter((r) => r[field] < val);
+      return this;
+    },
+    contains(field, arr) {
+      rows = rows.filter((r) => {
+        const list = r[field] || [];
+        return arr.every((v) => list.includes(v));
+      });
+      return this;
+    },
+    // or("field.ilike.%x%,field2.ilike.%y%") — 简化版：只支持 ilike 模糊匹配
+    or(expr) {
+      const parts = expr.split(",");
+      const conditions = parts.map((p) => {
+        const m = p.match(/^(\w+)\.ilike\.(.+)$/);
+        if (m) return { field: m[1], op: "ilike", val: m[2].replace(/^%|%$/g, "") };
+        return null;
+      }).filter(Boolean);
+      rows = rows.filter((r) => conditions.some((c) => {
+        const v = String(r[c.field] || "");
+        return v.toLowerCase().includes(c.val.toLowerCase());
+      }));
+      return this;
+    },
+    order(field, { ascending } = {}) {
+      rows.sort((a, b) => {
+        const av = a[field], bv = b[field];
+        if (av < bv) return ascending ? -1 : 1;
+        if (av > bv) return ascending ? 1 : -1;
+        return 0;
+      });
+      return this;
+    },
+    limit(n) { rows = rows.slice(0, n); return this; },
+    select(fields, { count } = {}) {
+      if (fields && fields !== "*") {
+        picked = fields.split(",").map((s) => s.trim());
+      }
+      if (count === "exact") needCount = true;
+      return this;
+    },
+    range(from, to) {
+      const total = rows.length;
+      const page = rows.slice(from, to + 1);
+      return { data: _pick(page, picked), count: needCount ? total : undefined, error: null };
+    },
+    maybeSingle() {
+      const row = rows[0] || null;
+      return { data: row ? _pick([row], picked)[0] : null, error: null };
+    },
+    // 使查询器 thenable：await 时自动执行，返回 { data, count, error }
+    then(resolve) {
+      const result = {
+        data: _pick(rows, picked),
+        count: needCount ? rows.length : undefined,
+        error: null,
+      };
+      resolve(result);
+    },
+  };
+}
+function _pick(arr, fields) {
+  if (!fields) return arr;
+  return arr.map((r) => {
+    const o = {};
+    fields.forEach((k) => { o[k] = r[k]; });
+    return o;
+  });
+}
+
+// 统一入口：本地模式走 localPosts()，否则走云端
+function postsQuery() {
+  return __localMode ? localPosts() : cloud.database.from("posts");
+}
+
+/* ---------- 4. 小工具 ---------- */
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -265,8 +419,8 @@ function bindSort(page) {
 }
 async function loadHeroStats() {
   try {
-    const { data, count } = await cloud.database
-      .from("posts").select("id,tags,views", { count: "exact" })
+    const { data, count } = await postsQuery()
+      .select("id,tags,views", { count: "exact" })
       .eq("status", "published");
     const posts = data || [];
     const tagSet = new Set();
@@ -283,7 +437,7 @@ async function loadPostList({ page, sort, baseQuery }) {
   if (!area) return;
   const from = (page - 1) * PAGE_SIZE, to = from + PAGE_SIZE - 1;
   try {
-    let q = baseQuery || cloud.database.from("posts");
+    let q = baseQuery || postsQuery();
     const cols = "id,title,summary,tags,cover_emoji,cover_hue,status,views,created_at,owner_id";
     let res;
     if (baseQuery) {
@@ -291,7 +445,7 @@ async function loadPostList({ page, sort, baseQuery }) {
         .order(window.__sort === "hot" ? "views" : "created_at", { ascending: false })
         .range(from, to);
     } else {
-      res = await cloud.database.from("posts").select(cols, { count: "exact" })
+      res = await postsQuery().select(cols, { count: "exact" })
         .eq("status", "published")
         .order(window.__sort === "hot" ? "views" : "created_at", { ascending: false })
         .range(from, to);
@@ -392,7 +546,7 @@ async function pagePost(app, id) {
   app.innerHTML = '<div class="spinner"></div>';
   let post;
   try {
-    const res = await cloud.database.from("posts").select("*").eq("id", id).maybeSingle();
+    const res = await postsQuery().select("*").eq("id", id).maybeSingle();
     post = unwrap(res, "load post");
   } catch (e) {
     app.innerHTML = `<div class="empty-state"><div class="es-icon">⚠️</div><p>加载失败：${escapeHtml(e.message || "")}</p></div>`;
@@ -449,10 +603,10 @@ async function loadPrevNext(post) {
   const out = { prev: null, next: null };
   try {
     const cols = "id,title,created_at";
-    const newer = await cloud.database.from("posts").select(cols)
+    const newer = await postsQuery().select(cols)
       .eq("status", "published").gt("created_at", post.created_at)
       .order("created_at", { ascending: true }).limit(1);
-    const older = await cloud.database.from("posts").select(cols)
+    const older = await postsQuery().select(cols)
       .eq("status", "published").lt("created_at", post.created_at)
       .order("created_at", { ascending: false }).limit(1);
     out.prev = newer.data?.[0] || null;
@@ -463,7 +617,7 @@ async function loadPrevNext(post) {
 
 /* ---------- 9. 页面：标签 ---------- */
 async function collectTagCounts() {
-  const { data, error } = await cloud.database.from("posts").select("tags").eq("status", "published");
+  const { data, error } = await postsQuery().select("tags").eq("status", "published");
   if (error) throw error;
   const counts = {};
   (data || []).forEach((p) => (p.tags || []).forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
@@ -495,7 +649,7 @@ async function pageTags(app) {
 async function pageTagFilter(app, tag) {
   app.innerHTML = `<div class="page-fade"><div class="section-head"><h2>🏷️ ${escapeHtml(tag)}</h2>
       <span class="sub"><a href="#/tags">← 全部标签</a></span></div><div id="post-area"><div class="spinner"></div></div><div id="pager"></div></div>`;
-  const base = cloud.database.from("posts").contains("tags", [tag]).eq("status", "published");
+  const base = postsQuery().contains("tags", [tag]).eq("status", "published");
   await loadPostList({ page: 1, baseQuery: base });
 }
 
@@ -971,7 +1125,7 @@ async function pageSearch(app, kw) {
     return;
   }
   try {
-    const res = await cloud.database.from("posts")
+    const res = await postsQuery()
       .select("id,title,summary,tags,cover_emoji,cover_hue,status,views,created_at,owner_id")
       .or(`title.ilike.%${safe}%,summary.ilike.%${safe}%`)
       .eq("status", "published")
@@ -1028,6 +1182,21 @@ function bindChrome() {
 
 (async function boot() {
   bindChrome();
-  await initAuth();
+  // 检测 URL 参数：?local=1 强制启用离线模式（用 _seed 种子数据）
+  const urlParams = new URLSearchParams(location.search);
+  if (urlParams.get("local") === "1") {
+    __localMode = true;
+    try {
+      await ensureLocalReady();
+      console.log(`[CodeTide] 本地模式：已加载 ${__localMeta.length} 篇种子文章`);
+    } catch (e) {
+      console.error("[CodeTide] 本地模式初始化失败：", e);
+    }
+  }
+  if (!__localMode) {
+    await initAuth();
+  } else {
+    renderAuthArea(); // 本地模式下隐藏登录/写文章按钮
+  }
   await render();
 })();

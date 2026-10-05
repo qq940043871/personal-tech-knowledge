@@ -9,6 +9,11 @@ import json
 import os
 
 KB_ROOT = os.environ.get("KB_ROOT", r"D:\ai_person\p000_0000_it")
+if not os.path.isdir(KB_ROOT):
+    raise SystemExit(
+        f"KB_ROOT 不存在: {KB_ROOT}\n"
+        "请用环境变量 KB_ROOT 指向知识库根目录（POSTS 中的路径相对于该目录）。"
+    )
 SEED_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(SEED_DIR, "seed_posts.jsonl")
 os.makedirs(os.path.dirname(OUT), exist_ok=True)

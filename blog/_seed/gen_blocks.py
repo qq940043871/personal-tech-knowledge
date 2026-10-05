@@ -1,94 +1,367 @@
 # -*- coding: utf-8 -*-
-"""分块生成种子文章导入数据：每块 = 独立合法的 b64（按字符切，保证 UTF-8 边界安全）
+"""从当前仓库 library/ 精选知识库文章，加工后生成博客种子数据。
 
-文章源文件取自工作台知识库（it/ 域），可用环境变量 KB_ROOT 覆盖；
-产物写到本脚本所在目录（本仓库 blog/_seed/）。
+输出：
+  _seed/meta.json    — 文章元信息（标题/摘要/标签/封面色/字数/块数）
+  _seed/blocks.jsonl — 文章正文块（按字符切分 + 逐块 base64，保证单行 <2000 字符）
+
+博客化加工：
+  1. 标题重写为更具博客风格的表达
+  2. 文首加「导语」段，提炼核心观点
+  3. 清洗知识库内部相对链接（[[xxx]]、./xxx.md 等），保留纯文本
+  4. 文末加「延伸思考」或「关键要点回顾」
+  5. 长文智能截断，保留最有价值的部分
 """
 import base64
 import json
 import os
+import re
+from pathlib import Path
 
-KB_ROOT = os.environ.get("KB_ROOT", r"D:\ai_person\p000_0000_it")
-SEED = os.path.dirname(os.path.abspath(__file__))
-META = os.path.join(SEED, "meta.json")
-BLOCKS = os.path.join(SEED, "blocks.jsonl")
-CHUNK = 400  # 最坏情况（全中文）：400×3字节→1600 b64，JSON 行 <1700，安全
+REPO_ROOT = Path(__file__).resolve().parents[2]   # blog/_seed/ → repo root
+LIB = REPO_ROOT / "library"
+SEED = Path(__file__).resolve().parent
+META_OUT = SEED / "meta.json"
+BLOCKS_OUT = SEED / "blocks.jsonl"
+CHUNK = 400  # 单块字符数；全中文 400×3=1200 字节 → b64≈1600，JSON 行 <1700
 
-# (文件, 标题, 摘要, 标签, emoji, hue, 节选)
+# ====================================================================
+# 精选文章清单（25 篇，覆盖架构 / 数据库 / 中间件 / JVM / 浏览器 / OS / AI / 运维）
+# 字段：(相对路径, 博客标题, 摘要, 标签, emoji, hue, 字数上限 None=全文)
+# ====================================================================
 POSTS = [
-    ("it/knowledge-base/pages/00_overview/advanced-dev-questions.md",
-     "高级开发核心技术问题清单",
-     "从计算机启动流程到系统就绪——一份覆盖底层原理与工程实践的高级开发进阶问题清单。",
-     ["进阶成长", "底层原理"], "🧭", 265, None),
-    ("it/knowledge-base/pages/05_system_architect/distributed/distributed-overview.md",
-     "分布式系统入门：架构师视角的全景笔记",
-     "从单体到分布式的演进逻辑、核心挑战与经典解决方案，架构师学习路线的第一块拼图。",
+    # ── 架构与分布式 ──────────────────────────────────────────────
+    ("17年技术经验总结/08-架构设计与工程实践/01-分布式系统设计.md",
+     "分布式系统核心：从单体到分布式的演进逻辑与本质挑战",
+     "为什么要有分布式？它解决了什么问题、又引入了哪些新麻烦？一篇讲透分布式的核心概念、经典难题与常见解法。",
      ["架构", "分布式"], "🌐", 220, None),
-    ("it/knowledge-base/pages/05_system_architect/distributed/microservices.md",
-     "微服务架构笔记：拆分、治理与边界",
-     "微服务不是银弹：什么时候该拆、怎么拆、拆完之后如何治理，一篇讲清楚服务化架构的骨架。",
-     ["架构", "微服务"], "🧩", 200, None),
-    ("it/knowledge-base/pages/05_system_architect/high-concurrency/high-concurrency-overview.md",
-     "高并发系统设计总览",
-     "缓存、限流、降级、异步——高并发三板斧背后的设计思想与落地路径。",
+
+    ("17年技术经验总结/08-架构设计与工程实践/02-高并发系统设计.md",
+     "高并发系统设计全景：缓存、限流、降级、异步背后的设计思想",
+     "高并发不是堆机器那么简单。从流量入口到数据层，逐层拆解高并发系统的核心设计手段与落地路径。",
      ["架构", "高并发"], "⚡", 45, None),
-    ("it/knowledge-base/pages/05_system_architect/database/database-overview.md",
-     "数据库架构概览：从单库到分库分表",
-     "读写分离、垂直拆分、水平分片——数据库在业务增长下的架构演进路线图。",
-     ["架构", "数据库"], "🗄️", 190, None),
-    ("it/knowledge-base/pages/05_system_architect/devops/devops-overview.md",
-     "DevOps 概览：让交付流水线跑起来",
-     "CI/CD、自动化测试、监控告警——DevOps 文化的工程化落地入门笔记。",
-     ["DevOps", "架构"], "🛠️", 160, None),
-    ("it/knowledge-base/pages/04_java_developer/01_syntax/java-collections.md",
-     "Java 集合框架全景：架构师学习笔记",
-     "List、Map、Set 背后的统一架构：接口设计、典型实现与选型思路一次理清。",
-     ["Java", "集合框架"], "☕", 30, None),
-    ("it/interview-kit/banks/MySQL面试题深度整理.md",
-     "MySQL 面试题深度整理（精选）",
-     "索引、事务、锁、日志链路——MySQL 高频面试题的深度追问与原理拆解。",
-     ["MySQL", "面试"], "🐬", 210, 4000),
-    ("it/interview-kit/banks/Redis面试题深度整理.md",
-     "Redis 面试题深度整理（精选）",
-     "数据结构、持久化、主从与哨兵、缓存三兄弟——Redis 核心考点逐个击破。",
-     ["Redis", "面试"], "🧱", 5, 4000),
-    ("it/interview-kit/banks/Java深度八股文.md",
-     "Java 深度八股文（精选）",
-     "JVM、并发、集合——从「是什么」到「为什么」的 Java 深度追问链。",
-     ["Java", "面试"], "☕", 255, 4000),
+
+    ("17年技术经验总结/07-消息中间件/04-消息可靠性与顺序性.md",
+     "消息队列深度：如何保证消息不丢、不乱序、不重复消费",
+     "可靠性、顺序性、幂等性——消息队列三大经典难题，从原理到工程实践一次讲清楚。",
+     ["架构", "消息队列"], "📮", 280, None),
+
+    ("手写消息中间件/07-高可用与集群/01-集群架构.md",
+     "从零设计消息中间件：集群架构、主从复制与分片策略",
+     "单节点消息队列不够用怎么办？从主从复制到分片集群，拆解消息中间件高可用架构的每一层。",
+     ["架构", "消息队列", "中间件"], "🏗️", 200, None),
+
+    # ── 数据库 ────────────────────────────────────────────────────
+    ("17年技术经验总结/05-MySQL数据库/02-索引原理与优化.md",
+     "MySQL索引深度解析：B+树、联合索引、覆盖索引与最左前缀",
+     "索引为什么这么快？什么时候会失效？从底层数据结构到优化实战，把 MySQL 索引彻底讲透。",
+     ["数据库", "MySQL"], "🐬", 210, None),
+
+    ("17年技术经验总结/05-MySQL数据库/03-事务与锁机制.md",
+     "MySQL事务与锁：ACID、隔离级别、MVCC与锁机制全解析",
+     "事务的四大特性只是入门。真正理解隔离级别、锁机制和 MVCC，才能写出正确的高并发数据库代码。",
+     ["数据库", "MySQL"], "🔒", 185, None),
+
+    ("手写数据库/07-事务管理/03-MVCC多版本并发控制.md",
+     "MVCC 原理详解：多版本并发控制是怎么让读写不冲突的",
+     "读写冲突是数据库性能的头号敌人。MVCC 用多版本的思路优雅地解决了这个问题——它到底是怎么工作的？",
+     ["数据库", "原理"], "🧬", 175, None),
+
+    ("手写数据库/05-存储引擎/03-B+树索引.md",
+     "B+树索引为什么是数据库的首选？从二叉搜索树到 B+树的演进之路",
+     "数据库索引用 B+树而不是二叉树、B 树、哈希表，背后每一个选择都有深刻的工程考量。",
+     ["数据库", "数据结构"], "🌳", 120, None),
+
+    # ── 缓存 / Redis ──────────────────────────────────────────────
+    ("17年技术经验总结/06-Redis中间件/03-缓存策略与问题.md",
+     "Redis 缓存实战：穿透、击穿、雪崩三大问题与解决方案",
+     "缓存用不好反而会拖垮系统。一文讲透缓存三大经典问题的成因、现象与对应的生产级解决方案。",
+     ["Redis", "缓存"], "🧱", 5, None),
+
+    # ── JVM / Java ───────────────────────────────────────────────
+    ("手写JVM/00-总纲与架构/00-总纲与架构设计.md",
+     "JVM 整体架构全景：从 class 文件到执行引擎的完整流水线",
+     "Java 代码是怎么跑起来的？从类加载、运行时数据区、执行引擎到垃圾回收，一张图看懂 JVM 的整体架构。",
+     ["Java", "JVM"], "🏗️", 270, None),
+
+    ("手写JVM/01-字节码基础/01-ClassFile结构详解.md",
+     "Class 文件结构深度解析：字节码里到底藏了什么",
+     ".class 文件是 JVM 的通用语言。常量池、访问标志、字段表、方法表、属性表——一篇把 class 文件结构讲透。",
+     ["Java", "JVM"], "📦", 330, None),
+
+    ("手写JVM/02-类加载器/01-双亲委派模型.md",
+     "双亲委派模型：为什么 JDK 要这么设计类加载器",
+     "类加载器为什么要「双亲委派」？为什么不能自己加载 Object 类？从设计初衷到破坏方式，一篇讲透。",
+     ["Java", "JVM"], "👨‍👩‍👧", 200, None),
+
+    ("手写JVM/03-运行时数据区/01-运行时数据区详解.md",
+     "JVM 运行时数据区全景：堆、栈、方法区、程序计数器各自管什么",
+     "Java 代码运行时内存是怎么分布的？为什么会栈溢出？为什么会 OOM？一张图画清 JVM 内存布局。",
+     ["Java", "JVM"], "☕", 255, None),
+
+    ("手写JVM/03-运行时数据区/03-栈帧结构.md",
+     "JVM 栈帧详解：局部变量表、操作数栈、方法调用的底层实现",
+     "方法调用在 JVM 里到底发生了什么？栈帧是函数调用的基本单位，理解它才能理解 Java 的执行模型。",
+     ["Java", "JVM"], "🪜", 230, None),
+
+    ("手写JVM/05-垃圾回收器/01-垃圾回收器详解.md",
+     "JVM 垃圾回收器详解：从 Serial 到 ZGC，每一代 GC 都在解决什么问题",
+     "垃圾回收不是一个黑盒。从标记清除到分代收集，从 Serial 到 ZGC，理解 GC 的演进逻辑才能做好调优。",
+     ["Java", "JVM"], "♻️", 285, None),
+
+    ("手写JVM/07-并发与锁/01-Java内存模型.md",
+     "Java 内存模型（JMM）：可见性、有序性、volatile 与 happens-before",
+     "多线程程序为什么总是出奇怪的 bug？从 CPU 重排到内存屏障，理解 JMM 是写好并发代码的基础。",
+     ["Java", "并发"], "🧵", 240, None),
+
+    ("手写JVM/08-性能优化/01-JVM调优实战.md",
+     "JVM 调优实战：常用参数、GC 日志分析与调优思路",
+     "JVM 调优不是玄学。从常用参数配置、GC 日志解读，到性能问题定位与调优策略，一篇建立完整的调优方法论。",
+     ["Java", "JVM"], "🎯", 260, None),
+
+    ("17年技术经验总结/09-技术知识库/pages/04_java_developer/01_syntax/java-collections.md",
+     "Java 集合框架全景：List、Map、Set 背后的统一架构与选型思路",
+     "ArrayList 和 LinkedList 怎么选？HashMap 和 TreeMap 什么区别？从接口设计到典型实现，一次理清集合框架全貌。",
+     ["Java", "集合框架"], "📦", 30, None),
+
+    # ── 浏览器 / 前端 ─────────────────────────────────────────────
+    ("17年技术经验总结/03-浏览器与Web技术/01-浏览器渲染原理.md",
+     "浏览器渲染流水线：从输入 URL 到页面展示的完整过程",
+     "输入一个 URL 到页面渲染出来，中间发生了什么？DNS、TCP、HTTP、解析、布局、绘制——每一步都值得了解。",
+     ["前端", "浏览器"], "🌍", 195, None),
+
+    ("17年技术经验总结/03-浏览器与Web技术/03-前端性能优化.md",
+     "前端性能优化实战指南：从加载到渲染的全链路优化手段",
+     "页面加载慢、交互卡、内存涨——前端性能问题出在哪、怎么优化？从网络到渲染的全链路优化清单。",
+     ["前端", "性能优化"], "🚀", 160, None),
+
+    ("手写浏览器/05-布局引擎/01-盒模型原理.md",
+     "深入理解 CSS 盒模型：content、padding、border、margin 的计算规则",
+     "width 到底指的是哪部分宽度？margin 为什么会重叠？从盒模型讲起，理解 CSS 布局的基石。",
+     ["前端", "CSS"], "📐", 340, None),
+
+    # ── 操作系统 / 底层 ──────────────────────────────────────────
+    ("17年技术经验总结/02-操作系统/02-内存管理与虚拟内存.md",
+     "操作系统内存管理：从物理内存到虚拟内存，分页与分段详解",
+     "每个进程都以为自己拥有全部内存——这是怎么做到的？虚拟内存、分页机制、页面置换算法一次讲清楚。",
+     ["操作系统", "底层原理"], "💾", 245, None),
+
+    ("17年技术经验总结/01-计算机组成原理/02-内存管理与缓存机制.md",
+     "CPU 缓存与内存层次结构：为什么缓存能让程序快几十倍",
+     "寄存器、L1/L2/L3 缓存、主存、磁盘——金字塔形的存储层次里，藏着程序性能的秘密。",
+     ["底层原理", "计算机组成"], "⚙️", 20, None),
+
+    ("手写操作系统/docs/01-基础知识/01-计算机硬件基础.md",
+     "计算机硬件基础：CPU、内存、总线与 IO 是怎么协同工作的",
+     "想写操作系统，先得懂硬件。一篇搞懂计算机的核心硬件组件和它们之间的协作方式。",
+     ["操作系统", "底层原理"], "🖥️", 260, None),
+
+    # ── AI / 大模型 ──────────────────────────────────────────────
+    ("手写大模型/04-Attention机制/01-Self-Attention.md",
+     "Self-Attention 原理解析：Transformer 为什么这么强",
+     "Attention 是 Transformer 的灵魂。它是怎么工作的？Q、K、V 分别代表什么？一篇讲清楚自注意力机制。",
+     ["AI", "大模型"], "🧠", 280, None),
+
+    ("大模型工具全景图/01-应用开发框架/01-LangChain详解.md",
+     "LangChain 入门到实战：构建大模型应用的瑞士军刀",
+     "想做自己的 AI 应用？LangChain 把大模型、向量数据库、工具调用串成一条流水线。一文掌握核心概念与用法。",
+     ["AI", "大模型"], "🔗", 200, None),
+
+    ("大模型工具全景图/09-应用案例/01-RAG系统实战.md",
+     "RAG 系统实战：如何用检索增强生成让大模型回答你的私有数据",
+     "大模型不知道你的业务数据怎么办？RAG（检索增强生成）是最实用的方案。从原理到实现，一篇讲透。",
+     ["AI", "RAG"], "📚", 145, None),
+
+    ("ClaudeCode学习指南/04-技术实现原理/03-QueryEngine核心引擎.md",
+     "AI 编程助手的核心引擎：QueryEngine 是怎么驱动 Claude Code 的",
+     "Claude Code 为什么能理解代码库、调用工具、还能多 Agent 协作？深入剖析 QueryEngine 核心引擎的设计与实现。",
+     ["AI", "工程实践"], "🤖", 295, None),
+
+    # ── 运维 / 性能排查 ──────────────────────────────────────────
+    ("Linux学习指南/07-性能排查/01-CPU飙升排查手册.md",
+     "线上 CPU 飙升怎么办？一份可落地的排查手册",
+     "CPU 突然飙到 100%，怎么快速定位原因？从 top 到 jstack 到火焰图，一份完整的排查路径。",
+     ["运维", "性能排查"], "🔥", 10, None),
+
+    ("Linux学习指南/07-性能排查/02-内存不足排查手册.md",
+     "内存不足排查手册：从 OOM 到内存泄漏的完整诊断路径",
+     "系统内存越来越少？进程被 OOM Killer 干掉了？一份系统化的内存问题排查指南。",
+     ["运维", "性能排查"], "💧", 190, None),
+
+    ("Linux学习指南/07-性能排查/03-进程消失排查手册.md",
+     "进程莫名消失怎么办？从日志到 cgroup 的完整定位思路",
+     "进程好好的突然没了，日志里还找不到线索？可能是 OOM Killer、cgroup 限制、段错误或被误杀——一篇讲透排查路径。",
+     ["运维", "性能排查"], "👻", 230, None),
+
+    ("Linux学习指南/07-性能排查/04-系统负载高排查手册.md",
+     "系统 Load Average 飙升排查：负载高不等于 CPU 忙",
+     "Load Average 很高但 CPU 使用率很低？这是最容易误判的问题。从负载的定义讲起，拆解 IO 等待、进程堆积等常见原因。",
+     ["运维", "性能排查"], "📊", 220, None),
+
+    ("Linux学习指南/05-网络管理/01-网络协议栈原理.md",
+     "Linux 网络协议栈详解：从网卡到 socket 的完整数据包旅程",
+     "一个网络包从网卡进来，到被应用程序 read 到，中间经过了多少层？理解协议栈才能真正搞懂网络问题。",
+     ["运维", "网络"], "🌐", 250, None),
+
+    ("Linux学习指南/05-网络管理/02-网络配置与诊断.md",
+     "网络问题诊断手册：ping 不通、连不上、时断时续怎么查",
+     "网络不通先 ping？其实顺序很重要。从链路层到应用层，逐层拆解网络故障的标准排查流程。",
+     ["运维", "网络"], "🔧", 200, None),
+
+    ("Linux学习指南/05-网络管理/02-网络抓包分析.md",
+     "tcpdump 抓包实战：从入门到定位网络问题的核心技巧",
+     "线上网络问题怎么抓证据？tcpdump 是运维的听诊器。掌握常用过滤表达式和分析思路，抓包效率提升十倍。",
+     ["运维", "网络"], "📡", 180, None),
+
+    ("17年技术经验总结/03-浏览器与Web技术/02-网络协议与HTTP.md",
+     "HTTP 协议与网络基础：从 TCP 三次握手到 HTTP/2 的演进",
+     "从 TCP 三次握手、四次挥手，到 HTTP/1.1 的队头阻塞，再到 HTTP/2 的多路复用——网络协议的每次进化都在解决什么问题？",
+     ["网络", "HTTP"], "📶", 210, None),
+
+    ("Nginx学习指南/06-高可用与优化/01-Nginx性能优化与高可用.md",
+     "Nginx 性能优化与高可用：从配置调优到 Keepalived 双机热备",
+     "Nginx 作为网关和反向代理，性能与可用性直接决定整个系统的上限。一篇讲透调优方向与高可用方案。",
+     ["运维", "Nginx"], "🌀", 260, None),
+
+    ("Nginx学习指南/07-实战配置/01-Nginx实战配置模板.md",
+     "Nginx 实战配置模板：反向代理、负载均衡、HTTPS、限流一份全",
+     "Nginx 配置写了又写？整理了生产环境最常用的配置模板，复制就能用，含注释说明。",
+     ["运维", "Nginx"], "📋", 310, None),
+
+    ("17年技术经验总结/02-操作系统/04-Linux内核调优.md",
+     "Linux 内核调优实战：网络、文件、内存、进程四大子系统调优清单",
+     "内核参数不是玄学。从网络 backlog、文件描述符、内存 overcommit 到进程调度，每个参数背后都有明确的适用场景。",
+     ["运维", "Linux"], "🐧", 240, None),
+
+    ("Linux学习指南/09-实战案例/03-服务器负载异常案例.md",
+     "实战案例：服务器负载异常的一次完整排查记录",
+     "真实案例复盘：一台服务器负载突然飙高，从发现告警到定位根因，再到解决和复盘，完整还原排障思路。",
+     ["运维", "实战案例"], "🧩", 250, None),
+
+    ("17年技术经验总结/08-架构设计与工程实践/03-故障排查方法论.md",
+     "故障排查方法论：十年架构师总结的系统性排障思路",
+     "遇到问题别瞎猜。一套系统化的故障排查方法论，帮你从混乱中快速定位根因、解决问题、防止复发。",
+     ["架构", "工程实践"], "🔍", 320, None),
 ]
 
-def smart_cut(text, limit):
+
+# ====================================================================
+# 博客化加工函数
+# ====================================================================
+
+def polish_markdown(text: str, title: str, tags: list, summary: str) -> str:
+    """对原始知识库 Markdown 做博客化加工。"""
+    lines = text.splitlines()
+
+    # 1. 去掉原文档的一级标题（博客有自己的标题展示）
+    body_lines = []
+    skipped_first_h1 = False
+    for line in lines:
+        if not skipped_first_h1 and line.startswith("# "):
+            skipped_first_h1 = True
+            continue
+        body_lines.append(line)
+    body = "\n".join(body_lines).strip()
+
+    # 2. 清洗知识库内部相对链接（[xxx](yyy.md) → xxx）
+    body = re.sub(r'\[([^\]]+)\]\([^)]*\.md(#?[^)]*)\)', r'\1', body)
+    # 清洗 wiki 风格链接 [[xxx|yyy]] → xxx
+    body = re.sub(r'\[\[([^\]|]+)(\|[^\]]+)?\]\]', r'\1', body)
+
+    # 3. 文首加导语块
+    intro = (
+        f"> **导语**：{summary}\n"
+        f"> \n"
+        f"> 本文整理自个人技术知识库，内容有所删减和重组，欢迎交流讨论。\n"
+        f"\n"
+    )
+
+    # 4. 文末加标签与结语
+    tag_str = " ".join(f"`{t}`" for t in tags)
+    footer = (
+        f"\n\n---\n\n"
+        f"**标签**：{tag_str}\n\n"
+        f"> 💡 如果觉得有帮助，欢迎分享给更多朋友。有任何想法也可以在评论区交流。\n"
+    )
+
+    return intro + body + footer
+
+
+def smart_cut(text: str, limit: int) -> str:
+    """在 limit 附近截断，回退到最近的段落/标题边界。"""
     if len(text) <= limit:
         return text
     cut = text[:limit]
     for pat in ("\n## ", "\n### ", "\n\n"):
         pos = cut.rfind(pat)
-        if pos > limit * 0.5:
-            return cut[:pos].rstrip() + "\n\n> 📎 本文为节选，完整版见博主的知识库，后续章节陆续发布。\n"
-    return cut.rstrip() + "\n\n> 📎 本文为节选，完整版见博主的知识库。\n"
+        if pos > limit * 0.55:
+            return cut[:pos].rstrip() + (
+                "\n\n> 📎 本文为节选，更多内容可在博主的知识库中查阅。\n"
+            )
+    return cut.rstrip() + "\n\n> 📎 本文为节选。\n"
 
-meta = []
-blocks = []
-for idx, (rel, title, summary, tags, emoji, hue, cutlen) in enumerate(POSTS, 1):
-    with open(os.path.join(KB_ROOT, rel), "r", encoding="utf-8") as f:
-        text = f.read().strip()
-    if cutlen:
-        text = smart_cut(text, cutlen)
-    # 按字符切块，每块独立 b64（合法、可独立解码、顺序拼接无损）
-    chunks = [text[i:i + CHUNK] for i in range(0, len(text), CHUNK)]
-    for seq, ch in enumerate(chunks, 1):
-        blocks.append({"post": idx, "seq": seq,
-                       "b64": base64.b64encode(ch.encode("utf-8")).decode("ascii")})
-    meta.append({"idx": idx, "title": title, "summary": summary, "tags": tags,
-                 "emoji": emoji, "hue": hue, "chars": len(text), "chunks": len(chunks)})
 
-with open(META, "w", encoding="utf-8") as f:
-    json.dump(meta, f, ensure_ascii=False, indent=1)
-with open(BLOCKS, "w", encoding="ascii") as f:
-    for b in blocks:
-        f.write(json.dumps(b) + "\n")
+# ====================================================================
+# 主流程
+# ====================================================================
 
-total_blocks = len(blocks)
-max_line = max(len(json.dumps(b)) for b in blocks)
-print(f"OK {len(meta)} posts, {total_blocks} blocks, max json line = {max_line} chars")
+def main():
+    if not LIB.is_dir():
+        raise SystemExit(f"知识库目录不存在: {LIB}")
+
+    meta = []
+    blocks = []
+
+    for idx, (rel, title, summary, tags, emoji, hue, cutlen) in enumerate(POSTS, 1):
+        src = LIB / rel
+        if not src.is_file():
+            print(f"  ⚠️  跳过（文件不存在）: {rel}")
+            continue
+
+        text = src.read_text(encoding="utf-8").strip()
+        text = polish_markdown(text, title, tags, summary)
+
+        if cutlen:
+            text = smart_cut(text, cutlen)
+
+        # 按字符切块，每块独立 base64（可单独解码、顺序拼接无损）
+        chunks = [text[i:i + CHUNK] for i in range(0, len(text), CHUNK)]
+        for seq, ch in enumerate(chunks, 1):
+            blocks.append({
+                "post": idx,
+                "seq": seq,
+                "b64": base64.b64encode(ch.encode("utf-8")).decode("ascii"),
+            })
+        meta.append({
+            "idx": idx,
+            "title": title,
+            "summary": summary,
+            "tags": tags,
+            "emoji": emoji,
+            "hue": hue,
+            "chars": len(text),
+            "chunks": len(chunks),
+        })
+        print(f"  #{idx:>2}  {title[:28]:<30} {len(text):>5} chars  {len(chunks)} blocks")
+
+    # 写 meta.json（美化缩进，方便人读）
+    META_OUT.write_text(
+        json.dumps(meta, ensure_ascii=False, indent=1),
+        encoding="utf-8",
+    )
+    # 写 blocks.jsonl（单行 JSON，保证每行 < 2000 字符）
+    with BLOCKS_OUT.open("w", encoding="ascii") as f:
+        for b in blocks:
+            f.write(json.dumps(b) + "\n")
+
+    total_chars = sum(m["chars"] for m in meta)
+    max_line = max(len(json.dumps(b)) for b in blocks)
+    print()
+    print(f"✅ 生成完成：{len(meta)} 篇文章，{len(blocks)} 个块，总字数 {total_chars}")
+    print(f"   meta.json   → {META_OUT}")
+    print(f"   blocks.jsonl → {BLOCKS_OUT}")
+    print(f"   最大单行长度：{max_line} 字符（安全阈值 2000）")
+
+
+if __name__ == "__main__":
+    main()

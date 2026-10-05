@@ -62,7 +62,7 @@ def organize_files_by_category():
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'python.html')
+    return send_from_directory(str(WORKSPACE_PATH), 'python.html')
 
 @app.route('/api/files')
 def get_files():
@@ -76,10 +76,15 @@ def get_file_content():
     file_path = request.args.get('path')
     if not file_path:
         return jsonify({'error': 'No file path provided'}), 400
-    
-    full_path = WORKSPACE_PATH / file_path
-    
-    if not full_path.exists() or not full_path.is_file():
+
+    root = WORKSPACE_PATH.resolve()
+    try:
+        full_path = (root / file_path).resolve()
+    except (OSError, ValueError):
+        return jsonify({'error': 'File not found'}), 404
+
+    # 阻断 ../ 逃逸，只允许读取工作区内的文件
+    if not full_path.is_relative_to(root) or not full_path.is_file():
         return jsonify({'error': 'File not found'}), 404
     
     try:
@@ -93,4 +98,4 @@ def get_file_content():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=os.environ.get('FLASK_DEBUG') == '1', port=5000)

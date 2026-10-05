@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="100%" stop-color="#764ba2"/>
+    </linearGradient>
+  </defs>
+  <!-- 圆角卡片背景 -->
+  <rect x="3" y="3" width="26" height="26" rx="6" ry="6" fill="url(#bg)"/>
+  <!-- 叠放的三页文档（白色，带透明度层次） -->
+  <rect x="9" y="8" width="14" height="16" rx="2" ry="2" fill="#ffffff" opacity="0.25"/>
+  <rect x="11" y="10" width="14" height="16" rx="2" ry="2" fill="#ffffff" opacity="0.45"/>
+  <rect x="13" y="12" width="14" height="16" rx="2" ry="2" fill="#ffffff"/>
+  <!-- 文档上的代码行（三行短横，代表代码/文档） -->
+  <rect x="16" y="16" width="8" height="1.5" rx="0.75" fill="#667eea"/>
+  <rect x="16" y="19" width="6" height="1.5" rx="0.75" fill="#764ba2"/>
+  <rect x="16" y="22" width="7" height="1.5" rx="0.75" fill="#667eea"/>
+</svg>

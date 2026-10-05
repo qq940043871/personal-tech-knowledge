@@ -1,0 +1,25 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 平台元数据 ----
+# 妙搭(WorkBuddy) 部署描述文件，由平台生成
+*.genie
+
+# ---- 生成产物 ----
+# blog/_seed 下的种子数据由 gen_seed.py / gen_blocks.py 生成，源在 blog/_seed/*.py 与 meta.json。
+# 注意：以下文件已被 git 跟踪，需执行
+#   git rm --cached blog/_seed/post_*.b64 blog/_seed/blocks.jsonl blog/_seed/seed_posts.jsonl
+# 后忽略规则才会生效。
+blog/_seed/post_*.b64
+blog/_seed/blocks.jsonl
+blog/_seed/seed_posts.jsonl
